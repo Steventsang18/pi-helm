@@ -264,6 +264,8 @@ interface HelmConfig {
 	neverFold: string[];
 	/** A: one-call groups render their row directly instead of `▸ 1 call`. */
 	autoRow: boolean;
+	/** New groups open at level 1 (▾ + per-call rows) instead of folded. */
+	defaultExpand: boolean;
 	/** Interface language: settings default; `/lang` flips it for the session. */
 	lang: Lang;
 	/** Built-in style + settings.json DIY overrides (contract: same namespace). */
@@ -279,6 +281,7 @@ const cfg: HelmConfig = {
 	fold: true,
 	neverFold: [],
 	autoRow: true,
+	defaultExpand: false,
 	lang: "zh",
 	style: DEFAULT_STYLE,
 };
@@ -288,7 +291,7 @@ let degradeNotified = false;
 
 const plainTheme: ThemeLike = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
 
-/** settings.json: `"pi-helm": { "enabled", "hotkey", "workingMessage", "fold", "neverFold", "autoRow", "lang", "style" }` */
+/** settings.json: `"pi-helm": { "enabled", "hotkey", "workingMessage", "fold", "neverFold", "autoRow", "defaultExpand", "lang", "style" }` */
 function readConfig(pi: ExtensionAPI) {
 	try {
 		const raw = (pi.getSettings() as any)?.["pi-helm"];
@@ -299,6 +302,7 @@ function readConfig(pi: ExtensionAPI) {
 			if (typeof raw.fold === "boolean") cfg.fold = raw.fold;
 			if (Array.isArray(raw.neverFold)) cfg.neverFold = raw.neverFold.filter((x: unknown): x is string => typeof x === "string");
 			if (typeof raw.autoRow === "boolean") cfg.autoRow = raw.autoRow;
+			if (typeof raw.defaultExpand === "boolean") cfg.defaultExpand = raw.defaultExpand;
 			if (raw.lang === "zh" || raw.lang === "en") cfg.lang = raw.lang;
 			if (raw.style && typeof raw.style === "object") cfg.style = mergeStyle(raw.style);
 		}
@@ -471,6 +475,7 @@ export default function (pi: ExtensionAPI) {
 	readConfig(pi);
 	lang = cfg.lang; // panel i18n follows settings; /lang flips both together
 	registry.setAutoRow(cfg.autoRow);
+	registry.setDefaultExpand(cfg.defaultExpand);
 
 	// ===== L0: group folding (resolver chain, contract #2) ==================
 	pi.registerToolRenderer(

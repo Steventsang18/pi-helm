@@ -285,6 +285,39 @@ test("expand: ctrl+o expanded flag is translated into levels", () => {
 	assert.equal(r.planFor("b")!.line, false);
 });
 
+// ── defaultExpand: new groups open at level 1 (supervisor spec, 2026-10-28) ──
+test("defaultExpand: false by default → new groups fold to level 0", () => {
+	const r = new GroupRegistry();
+	r.report({ callId: "a", toolName: "bash", status: "ok" });
+	r.report({ callId: "b", toolName: "read", status: "ok" });
+	assert.equal(r.planFor("a")!.header, "closed", "default: summary starts folded");
+	assert.equal(r.planFor("b")!.line, false, "default: non-first members hidden");
+});
+
+test("defaultExpand: true → new groups open at level 1 (▾ header + every member's row)", () => {
+	const r = new GroupRegistry({ defaultExpand: true });
+	r.report({ callId: "a", toolName: "bash", status: "ok" });
+	r.report({ callId: "b", toolName: "read", status: "ok" });
+	assert.equal(r.planFor("a")!.header, "open", "▾ header, no click needed");
+	assert.equal(r.planFor("a")!.line, true);
+	assert.equal(r.planFor("b")!.line, true, "second member's row visible by default");
+});
+
+test("defaultExpand: setDefaultExpand flips only groups opened after the call", () => {
+	const r = new GroupRegistry();
+	r.report({ callId: "old-1", toolName: "bash", status: "ok" });
+	r.report({ callId: "old-2", toolName: "read", status: "ok" });
+	assert.equal(r.planFor("old-1")!.header, "closed", "existing group keeps its level");
+
+	r.setDefaultExpand(true);
+	r.seal(); // turn end → next call opens a fresh group
+	r.report({ callId: "new-1", toolName: "bash", status: "ok" });
+	r.report({ callId: "new-2", toolName: "read", status: "ok" });
+	assert.equal(r.planFor("new-1")!.header, "open", "fresh group opens expanded");
+	assert.equal(r.planFor("new-2")!.line, true);
+	assert.equal(r.planFor("old-1")!.header, "closed", "old group untouched by the flip");
+});
+
 test("registry.planFor: unknown call → undefined; solo running row is live from frame one", () => {
 	const r = new GroupRegistry({ now: () => 10_000 });
 	assert.equal(r.planFor("nope"), undefined);

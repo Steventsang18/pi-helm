@@ -214,6 +214,8 @@ export interface GroupRegistryOptions {
 	now?: () => number;
 	/** A: one-call groups show their row directly instead of a `▸ 1 call` wrapper (default true). */
 	autoRow?: boolean;
+	/** Open new groups at level 1 (▾ + per-call rows) instead of folding (default false). */
+	defaultExpand?: boolean;
 }
 
 export const DEFAULT_PINNED_TOOLS: readonly string[] = ["edit", "write"];
@@ -227,6 +229,7 @@ export class GroupRegistry {
 	private readonly pinnedTools: ReadonlySet<string>;
 	private readonly now: () => number;
 	private autoRow: boolean;
+	private defaultExpand: boolean;
 	private groups: Group[] = [];
 	private current: Group;
 	private byCallId = new Map<string, { group: Group; member: GroupMember }>();
@@ -240,6 +243,7 @@ export class GroupRegistry {
 		this.pinnedTools = new Set(options.pinnedTools ?? DEFAULT_PINNED_TOOLS);
 		this.now = options.now ?? Date.now;
 		this.autoRow = options.autoRow ?? true;
+		this.defaultExpand = options.defaultExpand ?? false;
 		this.current = this.openGroup();
 	}
 
@@ -248,8 +252,13 @@ export class GroupRegistry {
 		this.autoRow = enabled;
 	}
 
+	/** Settings can arrive after construction — flip defaultExpand on the fly. */
+	setDefaultExpand(enabled: boolean): void {
+		this.defaultExpand = enabled;
+	}
+
 	private openGroup(): Group {
-		const group: Group = { id: this.nextGroupId++, level: 0, members: [], sealed: false };
+		const group: Group = { id: this.nextGroupId++, level: this.defaultExpand ? 1 : 0, members: [], sealed: false };
 		this.groups.push(group);
 		return group;
 	}

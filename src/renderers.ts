@@ -18,6 +18,9 @@ import {
 	type ToolStatus,
 	type ViewPlan,
 } from "./groups.ts";
+import { homedir } from "os";
+import { words } from "./strings.ts";
+import { DEFAULT_STYLE, type Style } from "./styles.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme-like interface (the real Theme structurally satisfies this)
@@ -56,20 +59,22 @@ export function fmtSummaryLine(
 	},
 	level: 0 | 1,
 	theme: ThemeLike,
+	style: Style = DEFAULT_STYLE,
 ): string {
-	const marker = theme.fg(level === 0 ? "accent" : "warning", level === 0 ? "▸" : "▾");
-	const head = `${marker} ${theme.bold(`${summary.count} call${summary.count === 1 ? "" : "s"}`)}`;
+	const marker = theme.fg(level === 0 ? "accent" : "warning", level === 0 ? style.marker : style.openMarker);
+	const head = `${marker} ${theme.bold(words().calls(summary.count))}`;
 	const parts = [head];
 	if (summary.breakdown.length > 0) {
-		parts.push(theme.fg("dim", summary.breakdown.map((e) => `${e.name}×${e.count}`).join(" ")));
+		// C: icon first — tool type at a glance; unknown tools keep their name
+		parts.push(theme.fg("dim", summary.breakdown.map((e) => `${style.icons[e.name] ?? e.name}×${e.count}`).join(" ")));
 	}
-	if (summary.failed > 0) parts.push(theme.fg("error", `${summary.failed} failed`));
-	if (summary.running > 0) parts.push(theme.fg("warning", `● ${summary.running} running`));
+	if (summary.failed > 0) parts.push(theme.fg("error", `✗ ${words().failed(summary.failed)}`));
+	if (summary.running > 0) parts.push(theme.fg("warning", `● ${words().running(summary.running)}`));
 	if (summary.usage) {
 		parts.push(theme.fg("dim", `↑${fmtTokens(summary.usage.input)} ↓${fmtTokens(summary.usage.output)}`));
 	}
 	if (summary.durationMs > 0) parts.push(theme.fg("dim", fmtDuration(summary.durationMs)));
-	return parts.join(" · ");
+	return parts.join(` ${style.sep} `);
 }
 
 export interface RowParts {
@@ -77,6 +82,12 @@ export interface RowParts {
 	toolName: string;
 	/** The goal phrase the schema injection collected: `[check test failures]`. */
 	reasoning?: string;
+	/**
+	 * Localized "what this tool does" (`运行命令`) — fills the reason slot
+	 * only when the model sent no reasoning: reason-first stays primary, the
+	 * catalog is the deterministic bilingual fallback (§requirement 1).
+	 */
+	desc?: string;
 	/** Command / path — what the call is about. */
 	detail?: string;
 	/** What it produced: `exit 1`, `12 lines`, `running 2s`. */
@@ -103,12 +114,17 @@ function fmtTokens(n: number): string {
  * The one-row view of a call inside an open group:
  * `└ ✓ bash [check test failures] pnpm test · exit 1 · ↑1.2k ↓169 · 1.8s`
  */
-export function fmtRow(parts: RowParts, theme: ThemeLike, gutter = true): string {
+export function fmtRow(parts: RowParts, theme: ThemeLike, gutter = true, style: Style = DEFAULT_STYLE): string {
 	const glyph = GLYPH[parts.status];
+	const reasonSlot = parts.reasoning
+		? theme.fg("accent", `[${parts.reasoning}]`)
+		: parts.desc
+			? theme.fg("dim", `[${parts.desc}]`)
+			: undefined;
 	const head = [
 		theme.fg(glyph.color, glyph.mark),
 		theme.bold(parts.toolName),
-		parts.reasoning ? theme.fg("accent", `[${parts.reasoning}]`) : undefined,
+		reasonSlot,
 		parts.detail ? theme.fg("dim", parts.detail) : undefined,
 	]
 		.filter((s): s is string => typeof s === "string" && s.length > 0)
@@ -120,9 +136,9 @@ export function fmtRow(parts: RowParts, theme: ThemeLike, gutter = true): string
 	]
 		.filter((s): s is string => typeof s === "string" && s.length > 0)
 		.map((s) => theme.fg(glyph.color, s))
-		.join(" · ");
-	const line = tail ? `${head} · ${tail}` : head;
-	return gutter ? `${theme.fg("dim", "└")} ${line}` : line;
+		.join(` ${style.sep} `);
+	const line = tail ? `${head} ${style.sep} ${tail}` : head;
+	return gutter ? `${theme.fg("dim", style.rowGutter)} ${line}` : line;
 }
 
 export interface PinnedParts {
@@ -137,7 +153,7 @@ export interface PinnedParts {
 }
 
 /** Header of an always-shown tool card (edit/write: the diff is the point). */
-export function fmtPinned(parts: PinnedParts, theme: ThemeLike): string {
+export function fmtPinned(parts: PinnedParts, theme: ThemeLike, style: Style = DEFAULT_STYLE): string {
 	const glyph = GLYPH[parts.status];
 	const head = [
 		theme.fg(glyph.color, glyph.mark),
@@ -154,23 +170,13 @@ export function fmtPinned(parts: PinnedParts, theme: ThemeLike): string {
 	]
 		.filter((s): s is string => typeof s === "string" && s.length > 0)
 		.map((s) => theme.fg(glyph.color, s))
-		.join(" · ");
-	return tail ? `${head} · ${tail}` : head;
+		.join(` ${style.sep} `);
+	return tail ? `${head} ${style.sep} ${tail}` : head;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Generic call description (works for built-ins, MCP and third-party tools)
 // ─────────────────────────────────────────────────────────────────────────────
-
-export const TOOL_ICONS: Record<string, string> = {
-	read: "📖",
-	bash: "⚡",
-	edit: "✏️",
-	write: "📝",
-	grep: "🔎",
-	find: "🗂",
-	ls: "📂",
-};
 
 function textOf(result: any): string {
 	return (result?.content ?? [])
@@ -180,13 +186,102 @@ function textOf(result: any): string {
 }
 
 function clip(text: string, width: number): string {
-	return text.length <= width ? text : `${text.slice(0, Math.max(0, width - 1))}…`;
+	return stringWidth(text) <= width ? text : `${clipToWidth(text, Math.max(1, width - 1))}…`;
+}
+
+/** Absolute paths shrink (`/Users/me/x` → `~/x`) — shorter lines, no username leak. */
+export function shortenPath(path: string): string {
+	try {
+		const home = homedir();
+		if (home && home !== "/" && path.startsWith(home)) return `~${path.slice(home.length)}`;
+	} catch {
+		// no homedir (odd sandbox) — show the path as-is
+	}
+	return path;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Display-width aware clipping (emoji/CJK are double-width in every terminal
+// we support; counting UTF-16 units — the old code — misaligns them all)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Emoji_Presentation code points inside otherwise narrow blocks (⚡ U+26A1 …). */
+const WIDE_RANGES: ReadonlyArray<readonly [number, number]> = [
+	[0x1100, 0x115f], [0x2e80, 0x303e], [0x3041, 0x33ff], [0x3400, 0x4dbf],
+	[0x4e00, 0x9fff], [0xa000, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff],
+	[0xfe30, 0xfe6f], [0xff00, 0xff60], [0x1f000, 0x1faff],
+	// narrow-block singles that terminals draw as emoji (all our TOOL_ICONS)
+	[0x231a, 0x231b], [0x23e9, 0x23ec], [0x23f0, 0x23f0], [0x23f3, 0x23f3],
+	[0x25fd, 0x25fe], [0x2614, 0x2615], [0x2648, 0x2653], [0x267f, 0x267f],
+	[0x2693, 0x2693], [0x26a1, 0x26a1], [0x26aa, 0x26ab], [0x26bd, 0x26be],
+	[0x26c4, 0x26c5], [0x26ce, 0x26ce], [0x26d4, 0x26d4], [0x26ea, 0x26ea],
+	[0x26f2, 0x26f3], [0x26f5, 0x26f5], [0x26fa, 0x26fa], [0x26fd, 0x26fd],
+	[0x2705, 0x2705], [0x270a, 0x270b], [0x2728, 0x2728], [0x274c, 0x274c],
+	[0x274e, 0x274e], [0x2753, 0x2755], [0x2757, 0x2757], [0x2795, 0x2797],
+	[0x27b0, 0x27b0], [0x27bf, 0x27bf], [0x2b1b, 0x2b1c], [0x2b50, 0x2b50],
+	[0x2b55, 0x2b55],
+];
+
+function isWide(cp: number): boolean {
+	for (const [lo, hi] of WIDE_RANGES) {
+		if (cp >= lo && cp <= hi) return true;
+	}
+	return false;
+}
+
+/** Cells one code point occupies. Zero-width marks, ZWJ and skin tones add nothing. */
+function cellWidth(cp: number): number {
+	if (cp === 0x200d) return 0; // ZWJ
+	if (cp >= 0x1f3fb && cp <= 0x1f3ff) return 0; // skin-tone modifiers ride the base emoji
+	if ((cp >= 0x0300 && cp <= 0x036f) || (cp >= 0x1ab0 && cp <= 0x1aff) || (cp >= 0x1dc0 && cp <= 0x1dff) ||
+		(cp >= 0x20d0 && cp <= 0x20ff) || (cp >= 0xfe20 && cp <= 0xfe2f))
+		return 0;
+	if (cp === 0xfe0f) return 0; // VS16: handled as an upgrade of the previous cell (below)
+	if (cp >= 0xfe00 && cp <= 0xfe0e) return 0;
+	return isWide(cp) ? 2 : 1;
+}
+
+/** Terminal cell width of a plain (no ANSI) string. */
+export function stringWidth(text: string): number {
+	let width = 0;
+	let lastWidth = 0;
+	let afterZwj = false;
+	for (const ch of text) {
+		const cp = ch.codePointAt(0)!;
+		if (cp === 0xfe0f) {
+			// VS16 flips a text-presentation char (✏ U+270F) to emoji width
+			if (lastWidth === 1) width += 1;
+			continue;
+		}
+		if (cp === 0x200d) {
+			afterZwj = true; // the emoji after a ZWJ joins the same grapheme
+			continue;
+		}
+		const w = cellWidth(cp);
+		width += afterZwj && w > 0 ? 0 : w;
+		if (w > 0) afterZwj = false;
+		lastWidth = w;
+	}
+	return width;
+}
+
+/** Clip a plain string to `width` cells on a code-point boundary. */
+function clipToWidth(text: string, width: number): string {
+	let out = "";
+	let used = 0;
+	for (const ch of text) {
+		const w = cellWidth(ch.codePointAt(0)!);
+		if (used + w > width) break;
+		out += ch;
+		used += w;
+	}
+	return out;
 }
 
 export function detailOf(toolName: string, args: any): string {
 	let detail = "";
 	if (typeof args?.command === "string") detail = args.command.replace(/\s+/g, " ").trim();
-	else if (typeof args?.path === "string") detail = args.path;
+	else if (typeof args?.path === "string") detail = shortenPath(args.path);
 	else if (typeof args?.pattern === "string") detail = String(args.pattern);
 	else if (typeof args?.query === "string") detail = args.query;
 	return clip(detail, 90);
@@ -198,10 +293,21 @@ export function outcomeOf(result: any, isError: boolean): string {
 		const first = text.split("\n").find((l: string) => l.trim()) ?? "error";
 		return clip(first, 60);
 	}
+	// edit/write: the diff stat is the headline (`+12/−3`), not line noise
+	const diff = result?.details?.diff;
+	if (typeof diff === "string" && diff.trim()) {
+		let adds = 0;
+		let dels = 0;
+		for (const line of diff.split("\n")) {
+			if (line.startsWith("+") && !line.startsWith("+++")) adds++;
+			else if (line.startsWith("-") && !line.startsWith("---")) dels++;
+		}
+		if (adds > 0 || dels > 0) return `+${adds}/−${dels}`;
+	}
 	const m = text.match(/exit code: (\d+)/);
-	if (m) return m[1] === "0" ? "done" : `exit ${m[1]}`;
+	if (m) return m[1] === "0" ? words().done : `exit ${m[1]}`;
 	const n = text.split("\n").filter((l: string) => l.trim()).length;
-	return n > 0 ? `${n} lines` : "ok";
+	return n > 0 ? words().lines(n) : words().ok;
 }
 
 function bodyLines(result: any): string[] {
@@ -232,22 +338,35 @@ interface CallView {
 
 const EMPTY_VIEW: CallView = { lines: [], hits: [] };
 
-/** ANSI-aware width clip, so no runtime pi-tui import is needed. */
+/** ANSI-aware clip to `width` cells, emoji/CJK counted double (see stringWidth). */
 function clipLine(line: string, width: number): string {
 	let visible = 0;
+	let lastWidth = 0;
 	let out = "";
-	for (let i = 0; i < line.length; i++) {
+	let i = 0;
+	while (i < line.length) {
 		if (line[i] === "\x1b") {
 			const end = line.indexOf("m", i);
 			if (end > 0) {
 				out += line.slice(i, end + 1);
-				i = end;
+				i = end + 1;
 				continue;
 			}
 		}
-		if (visible >= width) return `${out}…`;
-		out += line[i];
-		visible++;
+		const cp = line.codePointAt(i)!;
+		const ch = String.fromCodePoint(cp);
+		if (cp === 0xfe0f) {
+			if (lastWidth === 1) visible += 1; // VS16 widens the previous cell
+			out += ch;
+			i += ch.length;
+			continue;
+		}
+		const w = cellWidth(cp);
+		if (visible + w > width) return `${out}…`;
+		visible += w;
+		lastWidth = w;
+		out += ch;
+		i += ch.length;
 	}
 	return out;
 }
@@ -300,6 +419,8 @@ export interface ResolverOptions {
 	/** Tools whose own rendering wins (never folded, never drawn by us). */
 	neverFold?: readonly string[];
 	now?: () => number;
+	/** Display style (glyphs/icons/separators) — settings.json DIY layer. */
+	style?: Style;
 }
 
 /** Per-call live bookkeeping: the 1s clock and the reveal timer. */
@@ -371,6 +492,7 @@ export function disposeAllRenderers(): void {
 
 export function createToolResolver(options: ResolverOptions) {
 	const { registry } = options;
+	const style = options.style ?? DEFAULT_STYLE;
 	const now = options.now ?? (() => Date.now());
 
 	const isDrawn = (toolName: string): boolean => {
@@ -413,21 +535,26 @@ export function createToolResolver(options: ResolverOptions) {
 		durationMs: number | undefined,
 	): CallView => {
 		const plan: ViewPlan = registry.planFor(id) ?? { header: null, line: false, full: false, gutter: false };
-		const member = (registry.membersOf(id) ?? []).find((m) => m.callId === id);
-		const elapsed = member?.startedAt !== undefined ? Math.max(0, now() - member.startedAt) : undefined;
+		// recordOf covers pinned too — membersOf() never returns them, which is
+		// exactly how edit/write cards lost their ↑↓ tail (3a fix)
+		const record = registry.recordOf(id);
+		const elapsed = record?.startedAt !== undefined ? Math.max(0, now() - record.startedAt) : undefined;
+		const reasoning = typeof args?.reasoning === "string" && args.reasoning.trim() ? args.reasoning.trim() : undefined;
 		const parts: RowParts = {
 			status: phase === "running" ? "running" : phase === "error" ? "error" : "ok",
 			toolName,
-			reasoning: typeof args?.reasoning === "string" && args.reasoning.trim() ? args.reasoning.trim() : undefined,
+			// reason-first: the model's phrase wins, the catalog describes the rest
+			reasoning,
+			desc: reasoning ? undefined : words().describe(toolName),
 			detail: detailOf(toolName, args),
 			outcome:
 				phase === "running"
 					? elapsed === undefined
-						? "running"
-						: `running ${fmtDuration(elapsed)}`
+						? words().inProgress
+						: words().runningFor(fmtDuration(elapsed))
 					: outcomeOf(result, phase === "error"),
-			durationMs: phase === "running" ? undefined : durationMs,
-			usage: member?.usage,
+			durationMs: phase === "running" ? undefined : durationMs ?? record?.durationMs,
+			usage: record?.usage,
 		};
 		const lines: string[] = [];
 		const hits: (Hit | null)[] = [];
@@ -438,13 +565,14 @@ export function createToolResolver(options: ResolverOptions) {
 					{
 						status: parts.status,
 						toolName,
-						icon: TOOL_ICONS[toolName],
+						icon: style.icons[toolName],
 						label: parts.detail,
 						outcome: parts.outcome,
 						durationMs: parts.durationMs,
 						usage: parts.usage,
 					},
 					theme,
+					style,
 				),
 			);
 			hits.push(null);
@@ -458,11 +586,11 @@ export function createToolResolver(options: ResolverOptions) {
 
 		if (plan.header) {
 			const summary = registry.summary(id) ?? buildSummary(registry.membersOf(id) ?? []);
-			lines.push(fmtSummaryLine(summary, plan.header === "closed" ? 0 : 1, theme));
+			lines.push(fmtSummaryLine(summary, plan.header === "closed" ? 0 : 1, theme, style));
 			hits.push("toggle-header");
 		}
 		if (plan.full) {
-			lines.push(fmtRow(parts, theme));
+			lines.push(fmtRow(parts, theme, true, style));
 			hits.push("close-full");
 			const body = phase === "running" ? argsLines(args) : bodyLines(result);
 			for (const line of body) {
@@ -470,7 +598,7 @@ export function createToolResolver(options: ResolverOptions) {
 				hits.push("close-full");
 			}
 		} else if (plan.line) {
-			lines.push(fmtRow(parts, theme));
+			lines.push(fmtRow(parts, theme, true, style));
 			hits.push("open-row");
 		}
 		return { lines, hits };
@@ -519,14 +647,23 @@ export function createToolResolver(options: ResolverOptions) {
 			renderResult(result: any, options: any, theme: ThemeLike, context: any) {
 				if (options?.isPartial) return new GroupLine(() => EMPTY_VIEW, () => {});
 				const id = String(context?.toolCallId ?? "");
-				const isError = options?.isError === true || result?.isError === true;
+				// pi runtime shape (tool-execution.js getRenderContext): options =
+				// {expanded, isPartial} ONLY; isError and durationMs live on context
+				// (3a fix — the old options.isError/offsets read undefined)
+				const isError = context?.isError === true || options?.isError === true || result?.isError === true;
+				const settled =
+					typeof context?.durationMs === "number"
+						? context.durationMs
+						: typeof options?.durationMs === "number"
+							? options.durationMs
+							: undefined;
 				report(id, toolName, {
 					status: isError ? "error" : "ok",
-					durationMs: typeof options?.durationMs === "number" ? options.durationMs : undefined,
+					durationMs: settled,
 				});
 				syncExpanded(id, (options?.expanded ?? context?.expanded) === true);
 				clearClock(id);
-				return wire(id, toolName, context?.args ?? args, result, isError ? "error" : "done", theme, options?.durationMs, () =>
+				return wire(id, toolName, context?.args ?? args, result, isError ? "error" : "done", theme, settled, () =>
 					context?.invalidate?.(),
 				);
 			},

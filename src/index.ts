@@ -30,6 +30,8 @@ import { matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { homedir } from "os";
 import { GroupRegistry, buildSummary, classifyAssistant, rebuildFromEntries, type EntryLike, type ToolCallRecord } from "./groups.ts";
 import { createToolResolver, disposeAllRenderers, fmtSummaryLine, type ThemeLike } from "./renderers.ts";
+import { setLang } from "./strings.ts";
+import { DEFAULT_STYLE, mergeStyle, type Style } from "./styles.ts";
 
 const STATUS_KEY = "pi-helm:mission";
 const PILL_TYPE = "pi-helm:pill";
@@ -260,6 +262,12 @@ interface HelmConfig {
 	workingMessage: boolean;
 	fold: boolean;
 	neverFold: string[];
+	/** A: one-call groups render their row directly instead of `▸ 1 call`. */
+	autoRow: boolean;
+	/** Interface language: settings default; `/lang` flips it for the session. */
+	lang: Lang;
+	/** Built-in style + settings.json DIY overrides (contract: same namespace). */
+	style: Style;
 }
 
 const cfg: HelmConfig = {
@@ -270,6 +278,9 @@ const cfg: HelmConfig = {
 	workingMessage: true,
 	fold: true,
 	neverFold: [],
+	autoRow: true,
+	lang: "zh",
+	style: DEFAULT_STYLE,
 };
 const registry = new GroupRegistry();
 let reasoningInjected = true;
@@ -277,7 +288,7 @@ let degradeNotified = false;
 
 const plainTheme: ThemeLike = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
 
-/** settings.json: `"pi-helm": { "enabled", "hotkey", "workingMessage", "fold", "neverFold" }` */
+/** settings.json: `"pi-helm": { "enabled", "hotkey", "workingMessage", "fold", "neverFold", "autoRow", "lang", "style" }` */
 function readConfig(pi: ExtensionAPI) {
 	try {
 		const raw = (pi.getSettings() as any)?.["pi-helm"];
@@ -287,10 +298,14 @@ function readConfig(pi: ExtensionAPI) {
 			if (typeof raw.workingMessage === "boolean") cfg.workingMessage = raw.workingMessage;
 			if (typeof raw.fold === "boolean") cfg.fold = raw.fold;
 			if (Array.isArray(raw.neverFold)) cfg.neverFold = raw.neverFold.filter((x: unknown): x is string => typeof x === "string");
+			if (typeof raw.autoRow === "boolean") cfg.autoRow = raw.autoRow;
+			if (raw.lang === "zh" || raw.lang === "en") cfg.lang = raw.lang;
+			if (raw.style && typeof raw.style === "object") cfg.style = mergeStyle(raw.style);
 		}
 	} catch {
 		// settings unavailable in some modes — defaults stand
 	}
+	setLang(cfg.lang); // strings.ts is the single word-table for rows/summaries
 }
 
 /**
@@ -454,6 +469,8 @@ class MissionOverlay {
 export default function (pi: ExtensionAPI) {
 	const cwd = process.cwd();
 	readConfig(pi);
+	lang = cfg.lang; // panel i18n follows settings; /lang flips both together
+	registry.setAutoRow(cfg.autoRow);
 
 	// ===== L0: group folding (resolver chain, contract #2) ==================
 	pi.registerToolRenderer(
@@ -461,6 +478,7 @@ export default function (pi: ExtensionAPI) {
 			registry,
 			enabled: () => cfg.enabled && cfg.fold,
 			neverFold: cfg.neverFold,
+			style: cfg.style,
 		}),
 	);
 
@@ -684,7 +702,7 @@ export default function (pi: ExtensionAPI) {
 		const summary = registry.attachUsage(buildSummary(turnCalls));
 		// Attach accumulated token usage from assistant messages to the summary
 		if (summary.count >= 2 || summary.failed > 0) {
-			pushPoint(summary.failed > 0 ? "error" : "milestone", fmtSummaryLine(summary, 0, plainTheme));
+			pushPoint(summary.failed > 0 ? "error" : "milestone", fmtSummaryLine(summary, 0, plainTheme, cfg.style));
 		}
 		turnCalls = [];
 		// turn-diff auto pill (pi-tidy /diff idea, stamped automatically)
@@ -747,6 +765,7 @@ export default function (pi: ExtensionAPI) {
 			const v = args.trim();
 			if (v === "zh" || v === "en") {
 				lang = v;
+				setLang(v); // rows/summaries follow the panel language
 				ctx.ui.notify(t().langSwitched, "info");
 			} else {
 				ctx.ui.notify(`lang: ${lang} (usage: /lang zh|en)`, "info");

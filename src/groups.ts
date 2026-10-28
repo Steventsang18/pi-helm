@@ -152,6 +152,13 @@ export interface ViewPlanInput {
 	level?: 0 | 1;
 	/** Always-shown tool (edit/write): pi's own full box, nothing else. */
 	pinned?: boolean;
+	/**
+	 * A (autoRow): this call's group has exactly one member. One call has
+	 * nothing worth summarizing — `▸ 1 call · bash×1` hides what the call * * actually did, so the row itself becomes the whole view: no summary
+	 * header, no gutter (nothing above to connect to), idle → row, running →
+	 * live row, expanded → full box.
+	 */
+	solo?: boolean;
 	/** The full box is open for this member (level 2). */
 	expanded?: boolean;
 	/** Ms this call has been running, or undefined when nothing runs. */
@@ -160,8 +167,17 @@ export interface ViewPlanInput {
 
 /** Pure: how long a member has been hidden-worthy, from the clock. */
 export function viewPlan(input: ViewPlanInput): ViewPlan {
-	const { isFirst = false, level = 0, pinned = false, expanded = false, runningAgeMs } = input;
+	const { isFirst = false, level = 0, pinned = false, solo = false, expanded = false, runningAgeMs } = input;
 	if (pinned) return { header: null, line: false, full: true, gutter: false };
+	// A (autoRow): a one-call group skips the summary entirely — the row is
+	// the view. No anti-flicker delay here: there is no summary above for a
+	// row to pop out from under, and a second call joining folds the row into
+	// a real summary (a genuine state change, not a flicker).
+	if (solo) {
+		return expanded
+			? { header: null, line: false, full: true, gutter: false }
+			: { header: null, line: true, full: false, gutter: false };
+	}
 	const header = isFirst ? (level === 0 ? "closed" : "open") : null;
 	if (level === 0) {
 		if (runningAgeMs === undefined) return { header, line: false, full: false, gutter: false };
@@ -196,6 +212,8 @@ export interface GroupRegistryOptions {
 	pinnedTools?: readonly string[];
 	/** Clock seam for tests. */
 	now?: () => number;
+	/** A: one-call groups show their row directly instead of a `▸ 1 call` wrapper (default true). */
+	autoRow?: boolean;
 }
 
 export const DEFAULT_PINNED_TOOLS: readonly string[] = ["edit", "write"];
@@ -208,6 +226,7 @@ export const DEFAULT_PINNED_TOOLS: readonly string[] = ["edit", "write"];
 export class GroupRegistry {
 	private readonly pinnedTools: ReadonlySet<string>;
 	private readonly now: () => number;
+	private autoRow: boolean;
 	private groups: Group[] = [];
 	private current: Group;
 	private byCallId = new Map<string, { group: Group; member: GroupMember }>();
@@ -220,7 +239,13 @@ export class GroupRegistry {
 	constructor(options: GroupRegistryOptions = {}) {
 		this.pinnedTools = new Set(options.pinnedTools ?? DEFAULT_PINNED_TOOLS);
 		this.now = options.now ?? Date.now;
+		this.autoRow = options.autoRow ?? true;
 		this.current = this.openGroup();
+	}
+
+	/** Settings can arrive after construction — flip A (autoRow) on the fly. */
+	setAutoRow(enabled: boolean): void {
+		this.autoRow = enabled;
 	}
 
 	private openGroup(): Group {
@@ -328,6 +353,16 @@ export class GroupRegistry {
 	}
 
 	/**
+	 * The raw record behind a call — group member *or* pinned. The display
+	 * layer reads usage/duration from here: membersOf() returns undefined for
+	 * pinned calls, which is exactly how edit/write cards lost their ↑↓ tail
+	 * (3a fix).
+	 */
+	recordOf(callId: string): ToolCallRecord | undefined {
+		return this.byCallId.get(callId)?.member ?? this.pinnedById.get(callId);
+	}
+
+	/**
 	 * Accumulate assistant-message token usage. It is stamped onto the *live*
 	 * group (so every sealed group keeps its own share) and, separately, onto a
 	 * turn-level total used only by the turn-end key point.
@@ -372,6 +407,7 @@ export class GroupRegistry {
 		return viewPlan({
 			isFirst: group.members[0] === member,
 			level: group.level,
+			solo: this.autoRow && group.members.length === 1,
 			expanded: member.expanded,
 			runningAgeMs: this.runningAge(member),
 		});

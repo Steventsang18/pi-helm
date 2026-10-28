@@ -63,17 +63,20 @@ and marks steps done with `[DONE:n]` markers.
 Three levels, one click at a time:
 
 ```
- ▸ 5 calls · bash×3 read×2 · 1 failed · 1.2s          ← level 0: folded to one line
- ▾ 5 calls · bash×3 read×2 · 1 failed · 1.2s          ← level 1: click the summary
+ ▸ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s             ← level 0: folded to one line (iconized)
+ ▾ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s             ← level 1: click the summary
  │ ✓ bash [check test failures] pnpm test · exit 1 · 1.8s
  │ ✓ read src/app.ts · 120 lines · 0.0s
  │ ✗ bash [verify the fix] pnpm test · exit 1 · 1.2s   ← level 2: click a row
  │   …full output / diff here…
+
+ └ ✓ bash [run command] pnpm test · exit 1 · 1.8s      ← single call: no wrapper, the row IS the view
 ```
 
+- **Single calls don't fold (`autoRow`):** a one-call group has nothing worth summarizing — `▸ 1 call · bash×1` hides what it *did*; the row shows directly. Multi-call groups still fold.
 - **What folds:** every tool call between two pieces of assistant text. A step that only thinks and calls a tool does not split the group (a "carrier"); visible text does (a "boundary") and always renders — folding hides nothing but tool noise.
-- **Anti-flicker:** a call running under 1s never announces itself; failures are counted on the summary line (`2 failed`, red) instead of hanging red rows under a folded group.
-- **Never folded:** `edit` / `write` — their diff is the point. They also cut the group; calls after one start a fresh group.
+- **Anti-flicker:** a call running under 1s never announces itself inside a folded group (a single call's row is live from frame one — it *is* the view); failures are counted on the summary line (`✗ 1 failed`, red) instead of hanging red rows under a folded group.
+- **Never folded:** `edit` / `write` — their diff is the point, with `+12/−3` stats and `↑↓` usage in the tail. They also cut the group; calls after one start a fresh group.
 - **`Ctrl+O`** still expands everything and collapses back to the summary; clicking a full box folds just that one.
 - **Restore-safe:** on session resume the groups rebuild from the saved branch, so folding survives reload.
 
@@ -86,7 +89,10 @@ Config (`~/.pi/agent/settings.json`, applies on `/reload`):
     "hotkey": "ctrl+q",
     "workingMessage": true,
     "fold": true,
-    "neverFold": ["task"]
+    "neverFold": ["task"],
+    "autoRow": true,
+    "lang": "en",
+    "style": { "marker": "▸", "icons": { "bash": "⚡" } }
   }
 }
 ```
@@ -98,6 +104,11 @@ Config (`~/.pi/agent/settings.json`, applies on `/reload`):
 | `workingMessage` | `true` | Streaming phase text in the working line (`✻ thinking…` / `✍ writing…`) |
 | `fold` | `true` | Group folding itself |
 | `neverFold` | `[]` | Tool names that keep their own rendering untouched |
+| `autoRow` | `true` | A one-call group skips the `▸ 1 call` wrapper and shows its row directly (`└ ✓ bash …`) |
+| `lang` | `"en"` | Interface language default; flip per session with `/lang zh\|en` |
+| `style` | `{}` | DIY display layer: override `marker`/`openMarker`/`rowGutter`/`sep`/`icons` item by item; unknown/empty values are ignored; colors stay pi semantic theme tokens (dark/light safe) |
+
+> “What did this call do?” per row: the model's `reasoning` wins (`[check failures]`); when absent, the built-in tool catalog fills the slot (`run command` / `运行命令`, following `lang`). Descriptions are generated deterministically — this project makes zero LLM calls, that is a product red line.
 
 ### No-Fight Contract / 防打架契约
 
@@ -127,8 +138,10 @@ pi-helm is built to sit next to other extension packages. The rules that make it
 ```
 src/groups.ts      pure state machine   classifyAssistant · GroupRegistry · buildSummary
                                         · viewPlan · rebuildFromEntries (node --test, no pi import)
+src/strings.ts     zh/en word tables    summary/row vocabulary · tool description catalog (setLang)
+src/styles.ts      display style        built-in glyphs/icons/separator · settings style deep-merge
 src/renderers.ts   render glue          fmtSummaryLine / fmtRow / fmtPinned · GroupLine
-                                        · resolver chain · per-call timers
+                                        · resolver chain · per-call timers · cell-width clipping
 src/index.ts       wiring               events → registry · session restore · conflict ladder
                                         · mission state · overlay · pills · i18n · /helm
 index.ts           entry shim           re-exports src/index.ts (package entry point)

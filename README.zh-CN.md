@@ -63,17 +63,20 @@ Plan:
 三级展开，一次点一下：
 
 ```
- ▸ 5 calls · bash×3 read×2 · 1 failed · 1.2s          ← level 0：折成一行
- ▾ 5 calls · bash×3 read×2 · 1 failed · 1.2s          ← level 1：点摘要行
+ ▸ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s             ← level 0：折成一行（图标化）
+ ▾ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s             ← level 1：点摘要行
  │ ✓ bash [确认哪个断言挂了] pnpm test · exit 1 · 1.8s
  │ ✓ read src/app.ts · 120 lines · 0.0s
  │ ✗ bash [验证修复] pnpm test · exit 1 · 1.2s         ← level 2：点某行
  │   …完整输出 / diff…
+
+ └ ✓ bash [运行命令] pnpm test · exit 1 · 1.8s         ← 只有 1 个调用：不折，直接出行
 ```
 
+- **单调用不折（`autoRow`）**：组里只有 1 个调用时没有值得摘要的东西——`▸ 1 call · bash×1` 反而藏了“干了啥”，直接显示那行；多调用照旧折摘要。
 - **折什么**：两段 assistant 正文之间的全部工具调用。只思考+调工具的步骤不切组（carrier）；带正文的消息切组（boundary）且正文永远照常渲染——折叠只藏工具噪音，不藏任何正文。
-- **防闪**：跑不到 1s 的调用不现身；失败数粘在摘要行（`2 failed` 红字），不在折叠组下吊一排红行。
-- **永不折叠**：`edit` / `write`——diff 才是重点。它们同时切断组：其后的调用另开新组。
+- **防闪**：折叠组里跑不到 1s 的调用不现身（单调用组的行是实时的，它就是视图本身）；失败数粘在摘要行（`✗ 1 failed` 红字），不在折叠组下吊一排红行。
+- **永不折叠**：`edit` / `write`——diff 才是重点，行尾带 `+12/−3` 差异统计与 `↑↓` 用量；它们同时切断组：其后的调用另开新组。
 - **`Ctrl+O`** 照旧整体展开 / 收回摘要；点完整框只收起那一个。
 - **恢复安全**：会话恢复时从 `sessionManager.getBranch()` 重建分组，reload 后折叠依旧成立。
 
@@ -86,7 +89,10 @@ Plan:
     "hotkey": "ctrl+q",
     "workingMessage": true,
     "fold": true,
-    "neverFold": ["task"]
+    "neverFold": ["task"],
+    "autoRow": true,
+    "lang": "zh",
+    "style": { "marker": "▸", "icons": { "bash": "⚡" } }
   }
 }
 ```
@@ -98,6 +104,11 @@ Plan:
 | `workingMessage` | `true` | 工作行的流式阶段文案（`✻ 思考中…` / `✍ 撰写回复…`） |
 | `fold` | `true` | 分组折叠本身 |
 | `neverFold` | `[]` | 保持原生渲染、不折叠的工具名 |
+| `autoRow` | `true` | 单调用组不再折成 `▸ 1 call`，直接显示那行（`└ ✓ bash …`） |
+| `lang` | `"zh"` | 界面语言默认值；会话内用 `/lang zh\|en` 切换 |
+| `style` | `{}` | DIY 显示层：`marker`/`openMarker`/`rowGutter`/`sep`/`icons` 逐项覆盖内置风格，未知/空值不生效；颜色仍走 pi 语义 token（深浅主题自适应） |
+
+> 每行的“在做什么”：模型传了 `reasoning` 就显示它（`[确认断言]`）；没传则由内置工具描述目录兜底（`[运行命令]` / `run command`，随 `lang` 切换）。描述是确定性生成的——本项目零 LLM 调用，这是产品红线。
 
 ### 防打架契约（No-Fight Contract）
 
@@ -127,8 +138,10 @@ pi-helm 的设计目标就是和其它扩展包共处。以下 8 条是它不打
 ```
 src/groups.ts      纯状态机        classifyAssistant · GroupRegistry · buildSummary
                                   · viewPlan · rebuildFromEntries（node --test 直测，零 pi 依赖）
+src/strings.ts     中英文词表      摘要/行尾用词 · 工具描述目录（setLang 切换，纯模块）
+src/styles.ts      显示风格        内置字形/图标/分隔符 · settings style 深合并（纯模块）
 src/renderers.ts   渲染胶水        fmtSummaryLine / fmtRow / fmtPinned · GroupLine
-                                  · 解析器链 · per-call 计时器
+                                  · 解析器链 · per-call 计时器 · 显示宽度裁剪（emoji/CJK 双宽）
 src/index.ts       接线            事件 → registry · 会话恢复重建 · 冲突降级梯
                                   · 任务状态 · 面板 · 药丸卡 · i18n · /helm
 index.ts           入口 shim       re-export src/index.ts（包入口）

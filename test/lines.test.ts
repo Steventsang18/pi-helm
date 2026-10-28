@@ -4,7 +4,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GroupLine, createToolResolver, fmtDuration, fmtPinned, fmtRow, fmtSummaryLine, type ThemeLike } from "../src/renderers.ts";
+import { GroupLine, createToolResolver, fmtDuration, fmtPinned, fmtRow, fmtSummaryLine, outcomeOf, stringWidth, type ThemeLike } from "../src/renderers.ts";
 import { GroupRegistry, buildSummary, type GroupSummary, type ToolCallRecord } from "../src/groups.ts";
 
 /** Identity theme: assert on the plain text shape. */
@@ -39,14 +39,34 @@ const summary: GroupSummary = {
 	durationMs: 1200,
 };
 
-test("fmtSummaryLine: marker, count, breakdown, failed, running, duration", () => {
-	assert.equal(fmtSummaryLine(summary, 0, th), "▸ 5 calls · bash×3 read×2 · 2 failed · ● 1 running · 1.2s");
-	assert.equal(fmtSummaryLine(summary, 1, th), "▾ 5 calls · bash×3 read×2 · 2 failed · ● 1 running · 1.2s");
+test("fmtSummaryLine: marker, count, icon breakdown, failed, running, duration", () => {
+	assert.equal(fmtSummaryLine(summary, 0, th), "▸ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ● 1 running · 1.2s");
+	assert.equal(fmtSummaryLine(summary, 1, th), "▾ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ● 1 running · 1.2s");
+});
+
+test("fmtSummaryLine: unknown tools keep their name in the breakdown", () => {
+	const s: GroupSummary = { count: 2, breakdown: [{ name: "mcp__docs__search", count: 2 }], failed: 0, running: 0, durationMs: 0 };
+	assert.equal(fmtSummaryLine(s, 0, th), "▸ 2 calls · mcp__docs__search×2");
+});
+
+test("fmtSummaryLine: zh words (setLang) and DIY style glyphs", async () => {
+	const { setLang } = await import("../src/strings.ts");
+	const { mergeStyle } = await import("../src/styles.ts");
+	setLang("zh");
+	try {
+		assert.equal(fmtSummaryLine(summary, 0, th), "▸ 5 次调用 · ⚡×3 📖×2 · ✗ 2 次失败 · ● 1 个运行中 · 1.2s");
+	} finally {
+		setLang("en");
+	}
+	const diy = mergeStyle({ marker: "❯", openMarker: "⌄", rowGutter: "┆", sep: "|", icons: { bash: "BASH" } });
+	assert.equal(fmtSummaryLine(summary, 0, th, diy), "❯ 5 calls | BASH×3 📖×2 | ✗ 2 failed | ● 1 running | 1.2s");
+	// custom icon never drops the other defaults
+	assert.equal(diy.icons.read, "📖");
 });
 
 test("fmtSummaryLine: quiet group omits failed/running/duration", () => {
 	const quiet: GroupSummary = { count: 1, breakdown: [{ name: "read", count: 1 }], failed: 0, running: 0, durationMs: 0 };
-	assert.equal(fmtSummaryLine(quiet, 0, th), "▸ 1 call · read×1");
+	assert.equal(fmtSummaryLine(quiet, 0, th), "▸ 1 call · 📖×1");
 	assert.equal(fmtSummaryLine({ count: 0, breakdown: [], failed: 0, running: 0, durationMs: 0 }, 0, th), "▸ 0 calls");
 });
 
@@ -199,9 +219,10 @@ test("resolver: ctrl+o style expanded flips are translated, per-call", () => {
 		invalidate: () => {},
 	});
 	mine.renderCall({ command: "x" }, th, ctxFor("c1", true)); // arrives expanded (ctrl+o on)
-	assert.equal(registry.planFor("c1")!.header, "open", "group opens");
+	assert.equal(registry.planFor("c1")!.full, true, "solo: expand goes straight to the full box");
 	mine.renderCall({ command: "x" }, th, ctxFor("c1", false)); // ctrl+o off
-	assert.equal(registry.planFor("c1")!.header, "closed", "collapse-all lands");
+	assert.equal(registry.planFor("c1")!.line, true, "collapse-all lands on the row");
+	assert.equal(registry.planFor("c1")!.header, null, "solo group never shows a summary header");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,4 +273,115 @@ test("buildSummary: aggregates usage across members", () => {
 test("buildSummary: no usage → usage field undefined", () => {
 	const s = buildSummary([{ callId: "1", toolName: "bash", status: "ok" }]);
 	assert.equal(s.usage, undefined);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3a fix: pi passes isError/durationMs on CONTEXT (tool-execution.js:243),
+// and pinned calls live outside membersOf — both must reach the rendered tail
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("3a: renderResult reads isError + durationMs from context, not options", () => {
+	const registry = new GroupRegistry();
+	const resolver = createToolResolver({ registry, enabled: () => true });
+	const mine = resolver("bash", () => undefined) as any;
+	const ctx = { toolCallId: "c1", args: { command: "pnpm test" }, isError: true, durationMs: 1800, invalidate: () => {} };
+	// runtime shape: options = {expanded, isPartial} ONLY
+	const component = mine.renderResult({ content: [{ type: "text", text: "exit code: 1" }] }, { expanded: false, isPartial: false }, th, ctx);
+	const lines = component.render(120);
+	assert.equal(registry.recordOf("c1")!.status, "error", "error state came from context");
+	assert.equal(registry.recordOf("c1")!.durationMs, 1800, "duration came from context");
+	const solo = registry.planFor("c1")!;
+	assert.equal(solo.line, true, "autoRow: solo call renders its row");
+	const out = lines.join("\n");
+	assert.match(out, /✗/, "error glyph");
+	// errors show the first line of the actual error output (never hide why it failed)
+	assert.match(out, /exit code: 1/, "raw error line kept verbatim");
+	assert.match(out, /1\.8s/, "duration in the tail");
+});
+
+test("3a: pinned (edit/write) card carries ↑↓ usage and duration", () => {
+	const registry = new GroupRegistry();
+	const resolver = createToolResolver({ registry, enabled: () => true });
+	const mine = resolver("edit", () => undefined) as any;
+	registry.update("e1", { toolName: "edit", usage: { input: 800, output: 40 } }); // tool_result event
+	const ctx = { toolCallId: "e1", args: { path: "/x.ts" }, isError: false, durationMs: 300, invalidate: () => {} };
+	const component = mine.renderResult(
+		{ content: [{ type: "text", text: "ok" }], details: { diff: "+added line\n+another\n-removed" } },
+		{ expanded: false, isPartial: false },
+		th,
+		ctx,
+	);
+	const out = component.render(120).join("\n");
+	assert.match(out, /↑800 ↓40/, "usage now reaches the pinned card");
+	assert.match(out, /300ms/, "duration reaches the pinned card");
+	assert.match(out, /\+2\/−1/, "diff stat counts +/- lines");
+	assert.doesNotMatch(out, /1 lines/, "singular/plural grammar (was: '1 lines')");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Requirement 1: bilingual description fallback when the model sent no reason
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("desc: catalog fills the reason slot in zh/en; model reasoning wins", async () => {
+	const { setLang } = await import("../src/strings.ts");
+	setLang("zh");
+	try {
+		assert.equal(
+			fmtRow({ status: "ok", toolName: "bash", desc: "运行命令", detail: "pnpm test", outcome: "done" }, th),
+			"└ ✓ bash [运行命令] pnpm test · done",
+		);
+	} finally {
+		setLang("en");
+	}
+	// reasoning present → catalog never doubles up (viewOf drops desc)
+	assert.equal(
+		fmtRow({ status: "ok", toolName: "bash", reasoning: "check failures", desc: "run command", detail: "pnpm test" }, th),
+		"└ ✓ bash [check failures] pnpm test",
+	);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Display-width clipping: emoji/CJK are double-width; UTF-16 counting broke rows
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("stringWidth: ascii=1, CJK=2, emoji=2, VS16 widens, marks add nothing", () => {
+	assert.equal(stringWidth("abc"), 3);
+	assert.equal(stringWidth("中文"), 4);
+	assert.equal(stringWidth("⚡"), 2);
+	assert.equal(stringWidth("📖×2"), 4);
+	assert.equal(stringWidth("✏️"), 2, "U+270F is narrow until VS16 flips it");
+	assert.equal(stringWidth("✓✗●▸└"), 5, "box/dingbat glyphs stay single-width");
+	assert.equal(stringWidth("👨‍💻"), 2, "ZWJ sequence counts as one emoji");
+});
+
+test("GroupLine.render: clipping lands on a cell boundary, never mid-emoji", () => {
+	const line = new GroupLine(() => ({ lines: ["⚡⚡⚡".padEnd(0) + "abcdefgh"], hits: [null] }), () => {});
+	const out = line.render(6)[0];
+	assert.equal(stringWidth(out.replace("…", "")), 6);
+	assert.ok(out.endsWith("…"));
+	// an emoji that would straddle the boundary is dropped, not halved
+	const line2 = new GroupLine(() => ({ lines: ["abc⚡"], hits: [null] }), () => {});
+	const out2 = line2.render(4)[0];
+	assert.equal(out2, "abc…", "⚡ (2 cells) does not fit in 4th cell");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// outcome grammar: diff stat first, exit code, localized line counts
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("outcomeOf: diff stat, exit code, line counts (singular)", () => {
+	assert.equal(outcomeOf({ content: [], details: { diff: "+a\n+b\n-c" } }, false), "+2/−1");
+	assert.equal(outcomeOf({ content: [{ type: "text", text: "exit code: 0" }] }, false), "done");
+	assert.equal(outcomeOf({ content: [{ type: "text", text: "hello\nworld" }] }, false), "2 lines");
+	assert.equal(outcomeOf({ content: [{ type: "text", text: "single" }] }, false), "1 line", "was: '1 lines'");
+	assert.equal(outcomeOf({ content: [] }, false), "ok");
+});
+
+test("shortenPath: home dir collapses to ~, odd values pass through", async () => {
+	const { shortenPath, detailOf } = await import("../src/renderers.ts");
+	const { homedir } = await import("os");
+	assert.equal(shortenPath(`${homedir()}/x/y.ts`), "~/x/y.ts");
+	assert.equal(shortenPath("/etc/hosts"), "/etc/hosts", "outside home stays absolute");
+	assert.equal(shortenPath("relative/path"), "relative/path");
+	assert.equal(detailOf("edit", { path: `${homedir()}/README.zh-CN.md` }), "~/README.zh-CN.md");
 });

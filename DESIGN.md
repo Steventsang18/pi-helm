@@ -7,6 +7,8 @@
 
 ```
 Layer 1  src/groups.ts     纯状态机
+         src/strings.ts    中英文词表（纯数据 + setLang）
+         src/styles.ts     显示风格 + DIY 合并（纯数据）
 Layer 2  src/renderers.ts  渲染胶水
 Layer 3  src/index.ts      接线（事件/降级/面板）
          index.ts          入口 shim（re-export src/index.ts）
@@ -15,7 +17,9 @@ Layer 3  src/index.ts      接线（事件/降级/面板）
 | 层 | 职责 | 禁止事项 | 测试策略 |
 |---|---|---|---|
 | L1 `groups.ts` | boundary/carrier/plain 分类、分组注册表、摘要构建、viewPlan、`rebuildFromEntries` | 零 pi import、零主题、零副作用、零模块全局（实例化 registry，避免多会话/reload 竞态） | `node --test` 直测 |
-| L2 `renderers.ts` | 纯行格式化（`fmtSummaryLine`/`fmtRow`/`fmtPinned`）、自壳 `GroupLine`、`registerToolRenderer` 解析器链、per-call 计时器 | 结构性代码才能被直测——不 import pi 运行时 | 导入本文件直接测 |
+| L1 `strings.ts` | 摘要/行尾用词（call/failed/running/lines/done）+ 工具描述目录 | 零 pi import；只放界面用词，不放业务逻辑 | `setLang` 后直测断言 |
+| L1 `styles.ts` | 内置字形/图标/分隔符；settings `style` 覆盖的深合并 | 零 pi import；不放颜色（颜色是 theme token 的事） | merge/覆盖规则直测 |
+| L2 `renderers.ts` | 纯行格式化（`fmtSummaryLine`/`fmtRow`/`fmtPinned`）、自壳 `GroupLine`、`registerToolRenderer` 解析器链、per-call 计时器、显示宽度裁剪 | 结构性代码才能被直测——不 import pi 运行时 | 导入本文件直接测 |
 | L3 `index.ts` | 事件 → registry、会话恢复重建、冲突降级梯、任务状态、面板、药丸卡、i18n、`/helm` | 不放可单测的业务逻辑 | 手动/集成 |
 
 **为什么这样切**：折叠语义（最容易改错的部分）必须能在没有 pi 环境的单测里跑；渲染与接线各只依赖下面一层，方向单向向下，无环。
@@ -41,9 +45,13 @@ Layer 3  src/index.ts      接线（事件/降级/面板）
 - **防闪**：跑不到 1s 的调用不现身（`RUNNING_ROW_DELAY_MS`），否则工具行闪一下就消失比不折还吵。
 - **失败粘摘要**：`N failed` 红字贴在摘要行，不吊一排红行；错误永不被静默折叠。
 - **edit/write 永不折叠**且切断组：diff 是重点，其后的调用另开新组（宁可多折一行，不让 diff 淹没）。
-- **reason-first**：行首放 `reasoning` 短语（引导性可选字段，执行前剥离，不改模型行为）——摘要回答"干了什么"，reason 回答"为什么干"。
+- **reason-first**：行首放 `reasoning` 短语（引导性可选字段，执行前剥离，不改模型行为）——摘要回答“干了什么”，reason 回答“为什么干”。模型没传时由 `strings.ts` 描述目录兜底（`[运行命令]`），**确定性生成，零 LLM 调用是产品红线**；两者不同时出现（reason 优先）。
 - **三级展开**：level 0 摘要行 → level 1 行列表 → level 2 单行完整输出；`Ctrl+O` 整体切换。折叠是纯视图状态，会话恢复时从 `sessionManager.getBranch()` 重建。
+- **单调用不折（`autoRow`，A 方案）**：单成员组没有值得摘要的东西，`▸ 1 call · bash×1` 信息量反而低于它藏起来的那行——直接渲染行（无 header、无 `└` gutter，因为它上方没有可连的摘要）；组变回多成员时照旧折摘要。防闪对它不适用：行就是视图本身，不存在“冒出来又缩回去”。`"autoRow": false` 可关。
+- **摘要行图标化（C 方案）**：`▸ 5 calls · ⚡×3 📖×2`——图标让工具类型一眼可扫；未知工具（MCP 等）保留名字不硬套图标。只改呈现，不加行数。
 - **面板（/mission）是 overlay 不是替换**：Esc 秒关、不打断正在跑的回合；药丸卡经 `appendEntry` 注入，不进 LLM 上下文。
+- **单一内置风格 + DIY 接口**：不搞多主题预设（维护成本高、伪命题——终端里没有真的“Google 风格”）；内置一套经典字形，`settings.style` 逐项覆盖（`marker`/`openMarker`/`rowGutter`/`sep`/`icons`），空值/未知键不生效（手滑不黒屏）。颜色不开放——theme token 是深浅主题自适应和契约 #1 的前提。
+- **显示宽度裁剪**：emoji/CJK 是双宽；按 UTF-16 码元数裁剪（旧代码）会把行裁歪/裁半个 emoji。`stringWidth`/`clipLine` 按显示格宽计（含 VS16 提宽、ZWJ 合字、零宽记号），零 pi 依赖。
 
 ## 4. 出处（Provenance）
 
@@ -54,5 +62,7 @@ Layer 3  src/index.ts      接线（事件/降级/面板）
 
 ## 5. 未决 / 边界
 
-- 上游对比：repo 尚无 git remote，"最新"只对本地 HEAD 成立。
+- 上游对比：repo 尚无 git remote，“最新”只对本地 HEAD 成立。
 - 已知冲突矩阵（pi-tidy、工具定义所有者、`alt+…` 热键）见 README。
+- **pi 运行时契约（2026-10-28 钤死）**：`renderResult(result, options, theme, context)` 的 `options` 只有 `{expanded, isPartial}`；`durationMs`/`isError` 在 `context` 上（`tool-execution.js` getRenderContext）。读错对象 = 3a 那类“数据尾巴丢失”；改这里前先对照 pi 源码 `dist/core/extensions/types.d.ts` 的 `ToolRenderResultOptions`/`ToolRenderContext`。
+- pi 对扩展只暴露 `getSettings()`（读），无官方写接口——`/lang` 目前只改会话内存，重启失效；持久化需用户自己在 settings.json 写 `"lang"`（已文档化）。不自作主张写用户 settings 文件。

@@ -285,16 +285,28 @@ test("expand: ctrl+o expanded flag is translated into levels", () => {
 	assert.equal(r.planFor("b")!.line, false);
 });
 
-test("registry.planFor: unknown call → undefined; running age uses injected clock", () => {
+test("registry.planFor: unknown call → undefined; solo running row is live from frame one", () => {
 	const r = new GroupRegistry({ now: () => 10_000 });
 	assert.equal(r.planFor("nope"), undefined);
 	r.report({ callId: "a", toolName: "bash", status: "running", startedAt: 9_500 });
 	const plan = r.planFor("a")!;
-	assert.equal(plan.line, false);
+	// A (autoRow): one call = the row *is* the view — live clock from frame
+	// one, no summary header, no anti-flicker delay (nothing above to pop from)
+	assert.equal(plan.line, true);
+	assert.equal(plan.revealIn, undefined);
+	assert.equal(plan.header, null);
+	assert.equal(plan.full, false);
+});
+
+test("registry.planFor: a grouped running row still earns its keep after 1s (anti-flicker holds)", () => {
+	const r = new GroupRegistry({ now: () => 10_000 });
+	r.report({ callId: "a", toolName: "bash", status: "ok" });
+	r.report({ callId: "b", toolName: "read", status: "running", startedAt: 9_500 });
+	const plan = r.planFor("b")!;
+	assert.equal(plan.line, false, "two members: not solo, fresh running row stays hidden");
 	assert.equal(plan.revealIn, RUNNING_ROW_DELAY_MS - 500);
-	// a second member joins later: the summary moves to nothing until open —
-	// the first member still carries it, never a blank frame
-	assert.equal(plan.header, "closed");
+	// the first member still carries the summary — never a blank frame
+	assert.equal(r.planFor("a")!.header, "closed");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

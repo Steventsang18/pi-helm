@@ -143,7 +143,7 @@ pi -e ./index.ts              # 热加载测试
 PI_TUI_WRITE_LOG=1 pi -e .    # 调试原始 ANSI 流
 ```
 
-官方 API 参照文档原文存放在 [`docs/`](docs/)（`extensions.md`、`tui.md`、`packages.md`、`api-types.d.ts`，以及设计指南 `pi-extension-dev-guide.md`）。早期概念演示在 [`examples/`](examples/)。
+设计意图（三层架构、防打架契约、折叠权衡）见 [`DESIGN.md`](DESIGN.md)；pi `/settings` 逐项说明见 [`docs/pi-settings-guide.md`](docs/pi-settings-guide.md)。官方扩展/TUI API 文档：[pi docs](https://github.com/earendil-works/pi)。
 
 ## 路线图
 

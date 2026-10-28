@@ -143,7 +143,7 @@ pi -e ./index.ts              # hot-test
 PI_TUI_WRITE_LOG=1 pi -e .    # debug raw ANSI stream
 ```
 
-Official API references are vendored verbatim under [`docs/`](docs/) (`extensions.md`, `tui.md`, `packages.md`, `api-types.d.ts`, plus the design guide `pi-extension-dev-guide.md`). Earlier concept demos live in [`examples/`](examples/).
+Design rationale (layering, No-Fight contract, folding trade-offs) lives in [`DESIGN.md`](DESIGN.md); a pi `/settings` walkthrough lives in [`docs/pi-settings-guide.md`](docs/pi-settings-guide.md). Official extension/TUI API docs: [pi docs](https://github.com/earendil-works/pi).
 
 ## Roadmap / 路线图
 

@@ -49,6 +49,7 @@ Layer 3  src/index.ts      接线（事件/降级/面板）
 - **三级展开**：level 0 摘要行 → level 1 行列表 → level 2 单行完整输出；`Ctrl+O` 整体切换。折叠是纯视图状态，会话恢复时从 `sessionManager.getBranch()` 重建。
 - **单调用不折（`autoRow`，A 方案）**：单成员组没有值得摘要的东西，`▸ 1 call · bash×1` 信息量反而低于它藏起来的那行——直接渲染行（无 header、无 `└` gutter，因为它上方没有可连的摘要）；组变回多成员时照旧折摘要。防闪对它不适用：行就是视图本身，不存在“冒出来又缩回去”。`"autoRow": false` 可关。
   - **但显式折叠-all 必须能折到它**（审计 2026-10-28 发现的缺陷）：`Ctrl+O` 折叠-all 对单成员组无效——`solo` 分支无视 level。修法：`Group.soloFolded` 标记“level 0 是用户折的”——新单成员组天生 level 0（`openGroup` 种子），naive 的“solo 尊重 level”会把它们全部默认折起，等于静默杀掉 autoRow。只有 `noteSetExpanded(collapse)` 置位，展开时清除；fresh（未折过）不受影响。
+  - **结构不变量**（审计复验确认，这也是 soloFolded 方案成立的根）：`solo=true` → viewPlan 走 solo 分支 → `header` 必为 null → fresh solo 组无头部可点 → **`toggleHeader` 对 fresh solo 组结构上不可达**。因此「单成员 + soloFolded=false + level 1 + 有 header」这个 naive① 触发态不可能存在；toggleHeader 只可能作用于有 header 的单成员组，而那必然已 `soloFolded=true`——不存在第 3 条漏置/漏清路径。
 - **默认展开（`defaultExpand`，用户拍板）**：新分组默认 level 0（折叠）是“省地”取向；要“开门见明细”的用户开此开关——新分组直接 level 1（`▾` 头 + 每成员一行）。只影响新建组（`openGroup` 处生效），已建组的 level 不被运行中配置翻转波及；会话恢复重建时也按当前配置展开。与 `autoRow` 正交：单调用组仍优先直出行。
 - **摘要行图标化（C 方案）**：`▸ 5 calls · ⚡×3 📖×2`——图标让工具类型一眼可扫；未知工具（MCP 等）保留名字不硬套图标。只改呈现，不加行数。
 - **面板（/mission）是 overlay 不是替换**：Esc 秒关、不打断正在跑的回合；药丸卡经 `appendEntry` 注入，不进 LLM 上下文。

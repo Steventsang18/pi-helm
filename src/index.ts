@@ -27,7 +27,10 @@ import {
 	createWriteToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { homedir } from "os";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { GroupRegistry, buildSummary, classifyAssistant, rebuildFromEntries, type EntryLike, type ToolCallRecord } from "./groups.ts";
 import { createToolResolver, disposeAllRenderers, fmtSummaryLine, type ThemeLike } from "./renderers.ts";
 import { setLang } from "./strings.ts";
@@ -291,23 +294,48 @@ let degradeNotified = false;
 
 const plainTheme: ThemeLike = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
 
-/** settings.json: `"pi-helm": { "enabled", "hotkey", "workingMessage", "fold", "neverFold", "autoRow", "defaultExpand", "lang", "style" }` */
+/**
+ * Apply one parsed `pi-helm` settings object to cfg (pure, shared by both
+ * readers below).
+ */
+function applyConfig(raw: any) {
+	if (!raw || typeof raw !== "object") return;
+	if (typeof raw.enabled === "boolean") cfg.enabled = raw.enabled;
+	if (typeof raw.hotkey === "string" && raw.hotkey) cfg.hotkey = raw.hotkey;
+	if (typeof raw.workingMessage === "boolean") cfg.workingMessage = raw.workingMessage;
+	if (typeof raw.fold === "boolean") cfg.fold = raw.fold;
+	if (Array.isArray(raw.neverFold)) cfg.neverFold = raw.neverFold.filter((x: unknown): x is string => typeof x === "string");
+	if (typeof raw.autoRow === "boolean") cfg.autoRow = raw.autoRow;
+	if (typeof raw.defaultExpand === "boolean") cfg.defaultExpand = raw.defaultExpand;
+	if (raw.lang === "zh" || raw.lang === "en") cfg.lang = raw.lang;
+	if (raw.style && typeof raw.style === "object") cfg.style = mergeStyle(raw.style);
+}
+
+/**
+ * pi 1.3.0 constraint (verified 2026-10-28): `pi.getSettings()` THROWS during
+ * extension loading ("Extension runtime not initialized") — runtime.getSettings
+ * is only wired in runner.bindCore(), after all factories ran. A settings read
+ * in the factory must therefore go to disk. We read the GLOBAL settings file
+ * directly; pi's own project-settings merge is re-applied on session_start
+ * below, when the official API is live. Registration-time keys (hotkey,
+ * enabled→reasoning injection) only honor this global read — documented.
+ */
+function readConfigFromDisk() {
+	try {
+		const path = join(getAgentDir(), "settings.json");
+		const parsed = JSON.parse(readFileSync(path, "utf8"));
+		applyConfig(parsed?.["pi-helm"]);
+	} catch {
+		// unreadable settings — defaults stand
+	}
+}
+
+/** session_start re-read via the official API (global + project merged). */
 function readConfig(pi: ExtensionAPI) {
 	try {
-		const raw = (pi.getSettings() as any)?.["pi-helm"];
-		if (raw && typeof raw === "object") {
-			if (typeof raw.enabled === "boolean") cfg.enabled = raw.enabled;
-			if (typeof raw.hotkey === "string" && raw.hotkey) cfg.hotkey = raw.hotkey;
-			if (typeof raw.workingMessage === "boolean") cfg.workingMessage = raw.workingMessage;
-			if (typeof raw.fold === "boolean") cfg.fold = raw.fold;
-			if (Array.isArray(raw.neverFold)) cfg.neverFold = raw.neverFold.filter((x: unknown): x is string => typeof x === "string");
-			if (typeof raw.autoRow === "boolean") cfg.autoRow = raw.autoRow;
-			if (typeof raw.defaultExpand === "boolean") cfg.defaultExpand = raw.defaultExpand;
-			if (raw.lang === "zh" || raw.lang === "en") cfg.lang = raw.lang;
-			if (raw.style && typeof raw.style === "object") cfg.style = mergeStyle(raw.style);
-		}
+		applyConfig((pi.getSettings() as any)?.["pi-helm"]);
 	} catch {
-		// settings unavailable in some modes — defaults stand
+		// settings unavailable in some modes — disk values stand
 	}
 	setLang(cfg.lang); // strings.ts is the single word-table for rows/summaries
 }
@@ -472,7 +500,9 @@ class MissionOverlay {
 
 export default function (pi: ExtensionAPI) {
 	const cwd = process.cwd();
-	readConfig(pi);
+	// pi 1.3.0: getSettings() throws during factory — read the disk copy now,
+	// re-merge officially on session_start (see readConfigFromDisk).
+	readConfigFromDisk();
 	lang = cfg.lang; // panel i18n follows settings; /lang flips both together
 	registry.setAutoRow(cfg.autoRow);
 	registry.setDefaultExpand(cfg.defaultExpand);
@@ -725,6 +755,11 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_start", (_e, ctx) => {
+		// runtime is live now — official settings read (project overrides merge in)
+		readConfig(pi);
+		registry.setAutoRow(cfg.autoRow);
+		registry.setDefaultExpand(cfg.defaultExpand);
+		lang = cfg.lang;
 		// folding survives restore: seed the registry from the active branch
 		try {
 			const branch = ctx.sessionManager?.getBranch?.() ?? [];

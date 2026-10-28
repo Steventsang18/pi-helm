@@ -80,7 +80,7 @@ Plan:
 - **`Ctrl+O`** 照旧整体展开 / 收回摘要；点完整框只收起那一个。
 - **恢复安全**：会话恢复时从 `sessionManager.getBranch()` 重建分组，reload 后折叠依旧成立。
 
-配置（`~/.pi/agent/settings.json`，`/reload` 生效）：
+配置（`~/.pi/agent/settings.json`，**重启 pi 生效**——`/reload` 换不掉已加载的 ESM）：
 
 ```json
 {
@@ -110,6 +110,8 @@ Plan:
 | `lang` | `"zh"` | 界面语言默认值；会话内用 `/lang zh\|en` 切换 |
 | `style` | `{}` | DIY 显示层：`marker`/`openMarker`/`rowGutter`/`sep`/`icons` 逐项覆盖内置风格，未知/空值不生效；颜色仍走 pi 语义 token（深浅主题自适应） |
 
+> **限制**：`hotkey` 与 `enabled`（reasoning 注入）是**注册期**配置，只认全局 `settings.json`（pi 1.3.0 在扩展加载期不给 `getSettings()`，只能直读全局文件）；project settings 里的这两项不生效。其余键（折叠/风格/语言/defaultExpand 等）在 `session_start` 官方重读，project 覆盖正常合并。
+>
 > 每行的“在做什么”：模型传了 `reasoning` 就显示它（`[确认断言]`）；没传则由内置工具描述目录兜底（`[运行命令]` / `run command`，随 `lang` 切换）。描述是确定性生成的——本项目零 LLM 调用，这是产品红线。
 
 ### 防打架契约（No-Fight Contract）

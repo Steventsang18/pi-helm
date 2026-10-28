@@ -303,6 +303,19 @@ test("defaultExpand: true → new groups open at level 1 (▾ header + every mem
 	assert.equal(r.planFor("b")!.line, true, "second member's row visible by default");
 });
 
+test("defaultExpand: late setDefaultExpand re-seeds the pristine construction group", () => {
+	// pi 1.3.0: settings only become readable on session_start, AFTER the
+	// module-scope registry opened G1 at level 0. Without the re-seed, the
+	// first turn would land in a stale level-0 group — the exact bug reported
+	// 2026-10-28 ("expands while running, folds when done").
+	const r = new GroupRegistry(); // G1: level 0 (no settings yet)
+	r.setDefaultExpand(true); // session_start re-read
+	r.report({ callId: "c1", toolName: "bash", status: "ok" });
+	r.report({ callId: "c2", toolName: "read", status: "ok" });
+	assert.equal(r.planFor("c1")!.header, "open", "first turn lands in an expanded group");
+	assert.equal(r.planFor("c2")!.line, true);
+});
+
 test("defaultExpand: setDefaultExpand flips only groups opened after the call", () => {
 	const r = new GroupRegistry();
 	r.report({ callId: "old-1", toolName: "bash", status: "ok" });

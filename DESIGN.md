@@ -68,4 +68,5 @@ Layer 3  src/index.ts      接线（事件/降级/面板）
 - 上游对比：repo 尚无 git remote，“最新”只对本地 HEAD 成立。
 - 已知冲突矩阵（pi-tidy、工具定义所有者、`alt+…` 热键）见 README。
 - **pi 运行时契约（2026-10-28 钤死）**：`renderResult(result, options, theme, context)` 的 `options` 只有 `{expanded, isPartial}`；`durationMs`/`isError` 在 `context` 上（`tool-execution.js` getRenderContext）。读错对象 = 3a 那类“数据尾巴丢失”；改这里前先对照 pi 源码 `dist/core/extensions/types.d.ts` 的 `ToolRenderResultOptions`/`ToolRenderContext`。
+- **pi 1.3.0 settings 陷阱（2026-10-28 实锤，曾致全部配置静默失效）**：`pi.getSettings()` 在扩展**工厂期必抛** `Extension runtime not initialized`（`runtime.getSettings` 在 `runner.bindCore()` 才接真实现，晚于所有 factory）。工厂里 try/catch 吞掉 → 所有 settings 静默跑默认值。正确姿势：**工厂期读盘**（`join(getAgentDir(), "settings.json")` 直读全局配置）+ **`session_start` 用官方 API 重读**（此时 runtime 已活，project 覆盖合并进来）。代价：注册期才生效的键（`hotkey`、`enabled`→reasoning 注入）只认全局盘读，project settings 里的这两个不生效——已文档化。教训：**catch 静默吞异常是温床，吞的时候必须留下可见痕迹**。
 - pi 对扩展只暴露 `getSettings()`（读），无官方写接口——`/lang` 目前只改会话内存，重启失效；持久化需用户自己在 settings.json 写 `"lang"`（已文档化）。不自作主张写用户 settings 文件。

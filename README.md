@@ -80,7 +80,7 @@ Three levels, one click at a time:
 - **`Ctrl+O`** still expands everything and collapses back to the summary; clicking a full box folds just that one.
 - **Restore-safe:** on session resume the groups rebuild from the saved branch, so folding survives reload.
 
-Config (`~/.pi/agent/settings.json`, applies on `/reload`):
+Config (`~/.pi/agent/settings.json`, requires a pi **restart** — `/reload` cannot swap already-loaded ESM):
 
 ```json
 {
@@ -110,6 +110,8 @@ Config (`~/.pi/agent/settings.json`, applies on `/reload`):
 | `lang` | `"en"` | Interface language default; flip per session with `/lang zh\|en` |
 | `style` | `{}` | DIY display layer: override `marker`/`openMarker`/`rowGutter`/`sep`/`icons` item by item; unknown/empty values are ignored; colors stay pi semantic theme tokens (dark/light safe) |
 
+> **限制**：`hotkey` 与 `enabled`（reasoning 注入）是**注册期**配置，只认全局 `settings.json`（pi 1.3.0 在扩展加载期不给 `getSettings()`，只能直读全局文件）；project settings 里的这两项不生效。其余键（折叠/风格/语言/defaultExpand 等）在 `session_start` 官方重读，project 覆盖正常合并。
+>
 > “What did this call do?” per row: the model's `reasoning` wins (`[check failures]`); when absent, the built-in tool catalog fills the slot (`run command` / `运行命令`, following `lang`). Descriptions are generated deterministically — this project makes zero LLM calls, that is a product red line.
 
 ### No-Fight Contract / 防打架契约

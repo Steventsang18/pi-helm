@@ -263,6 +263,12 @@ export class GroupRegistry {
 	/** Settings can arrive after construction — flip defaultExpand on the fly. */
 	setDefaultExpand(enabled: boolean): void {
 		this.defaultExpand = enabled;
+		// The construction group was opened before settings arrived — re-seed it
+		// while still pristine (empty + unsealed), so the first turn never lands
+		// in a stale level-0 group.
+		if (!this.current.sealed && this.current.members.length === 0) {
+			this.current.level = enabled ? 1 : 0;
+		}
 	}
 
 	private openGroup(): Group {

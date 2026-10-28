@@ -318,6 +318,49 @@ test("defaultExpand: setDefaultExpand flips only groups opened after the call", 
 	assert.equal(r.planFor("old-1")!.header, "closed", "old group untouched by the flip");
 });
 
+// ── autoRow × collapse-all: an explicit fold must reach solo groups too ──────
+// (audit 2026-10-28 defect: naive "solo respects level" would fold every fresh
+// solo group — they are level 0 by construction — killing autoRow's default.
+// soloFolded marks "level 0 because the user folded", distinct from "fresh".)
+test("autoRow×collapse-all: explicit fold collapses a solo group to its summary", () => {
+	const r = new GroupRegistry({ autoRow: true });
+	r.report({ callId: "s1", toolName: "bash", status: "ok" });
+	assert.equal(r.planFor("s1")!.line, true, "default: solo row (autoRow intact)");
+
+	r.noteSetExpanded("s1", false, false); // ctrl+o collapse-all
+	const folded = r.planFor("s1")!;
+	assert.equal(folded.line, false, "collapse-all reaches the solo group");
+	assert.equal(folded.header, "closed", "summary line is what remains");
+
+	r.toggleHeader("s1"); // click the summary to reopen
+	const open = r.planFor("s1")!;
+	assert.equal(open.header, "open");
+	assert.equal(open.line, true, "solo row returns after expanding");
+});
+
+test("autoRow×collapse-all: fresh solo groups stay rows (level 0 ≠ folded)", () => {
+	const r = new GroupRegistry({ autoRow: true });
+	r.report({ callId: "s1", toolName: "bash", status: "ok" });
+	// the naive fix would fail here: fresh groups are level 0 by construction
+	assert.equal(r.planFor("s1")!.line, true, "fresh solo stays a row, not a summary");
+	assert.equal(r.planFor("s1")!.header, null);
+});
+
+test("autoRow×collapse-all: expand-all clears the fold flag; next turn's solo group is a row again", () => {
+	const r = new GroupRegistry({ autoRow: true });
+	r.report({ callId: "s1", toolName: "bash", status: "ok" });
+	r.noteSetExpanded("s1", false, false);
+	assert.equal(r.planFor("s1")!.line, false, "folded");
+
+	r.noteSetExpanded("s1", true, false); // ctrl+o expand-all
+	const expanded = r.planFor("s1")!;
+	assert.equal(expanded.full, true, "expand-all opens the full box (solo, flag cleared)");
+
+	r.seal();
+	r.report({ callId: "s2", toolName: "read", status: "ok" });
+	assert.equal(r.planFor("s2")!.line, true, "a fresh solo group in the next turn is a row");
+});
+
 test("registry.planFor: unknown call → undefined; solo running row is live from frame one", () => {
 	const r = new GroupRegistry({ now: () => 10_000 });
 	assert.equal(r.planFor("nope"), undefined);

@@ -203,6 +203,14 @@ interface Group {
 	level: 0 | 1;
 	members: GroupMember[];
 	sealed: boolean;
+	/**
+	 * The user explicitly folded this group (ctrl+o collapse-all). Solo
+	 * groups normally bypass the summary (autoRow), but an explicit fold
+	 * must reach them too — this flag is the "level 0 means folded, not
+	 * fresh" marker the plain level field cannot express (fresh solo
+	 * groups are level 0 by construction).
+	 */
+	soloFolded?: boolean;
 	/** Assistant-message token usage stamped onto this group as it accumulates. */
 	usage?: { input: number; output: number };
 }
@@ -416,7 +424,7 @@ export class GroupRegistry {
 		return viewPlan({
 			isFirst: group.members[0] === member,
 			level: group.level,
-			solo: this.autoRow && group.members.length === 1,
+			solo: this.autoRow && group.members.length === 1 && !group.soloFolded,
 			expanded: member.expanded,
 			runningAgeMs: this.runningAge(member),
 		});
@@ -458,6 +466,7 @@ export class GroupRegistry {
 		const { group, member } = entry;
 		if (expanded) {
 			group.level = 1;
+			group.soloFolded = false;
 			member.expanded = true;
 			return;
 		}
@@ -466,6 +475,7 @@ export class GroupRegistry {
 			return;
 		}
 		group.level = 0;
+		group.soloFolded = true; // explicit fold — reaches solo groups too
 		for (const m of group.members) m.expanded = false;
 	}
 }

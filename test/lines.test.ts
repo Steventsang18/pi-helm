@@ -220,9 +220,10 @@ test("resolver: ctrl+o style expanded flips are translated, per-call", () => {
 	});
 	mine.renderCall({ command: "x" }, th, ctxFor("c1", true)); // arrives expanded (ctrl+o on)
 	assert.equal(registry.planFor("c1")!.full, true, "solo: expand goes straight to the full box");
-	mine.renderCall({ command: "x" }, th, ctxFor("c1", false)); // ctrl+o off
-	assert.equal(registry.planFor("c1")!.line, true, "collapse-all lands on the row");
-	assert.equal(registry.planFor("c1")!.header, null, "solo group never shows a summary header");
+	mine.renderCall({ command: "x" }, th, ctxFor("c1", false)); // ctrl+o off = collapse-all
+	const folded = registry.planFor("c1")!;
+	assert.equal(folded.line, false, "collapse-all now reaches the solo group (audit fix)");
+	assert.equal(folded.header, "closed", "what remains is the summary line");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

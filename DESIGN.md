@@ -55,6 +55,7 @@ Layer 3  src/index.ts      接线（事件/降级/面板）
 - **面板（/mission）是 overlay 不是替换**：Esc 秒关、不打断正在跑的回合；药丸卡经 `appendEntry` 注入，不进 LLM 上下文。
 - **单一内置风格 + DIY 接口**：不搞多主题预设（维护成本高、伪命题——终端里没有真的“Google 风格”）；内置一套经典字形，`settings.style` 逐项覆盖（`marker`/`openMarker`/`rowGutter`/`sep`/`icons`），空值/未知键不生效（手滑不黒屏）。颜色不开放——theme token 是深浅主题自适应和契约 #1 的前提。
 - **显示宽度裁剪**：emoji/CJK 是双宽；按 UTF-16 码元数裁剪（旧代码）会把行裁歪/裁半个 emoji。`stringWidth`/`clipLine` 按显示格宽计（含 VS16 提宽、ZWJ 合字、零宽记号），零 pi 依赖。
+- **edit/write 滚动框（Task 003，2026-10-28）**：长 diff 固定视口（`pinnedBodyHeight`，默认 14）+ 头部总行数 + wheel 自滚。**否决了官方 ScrollView**（监工原锚点）：① `routeWheel` 只在 layout 树找 `box.scrollView`，而 layout 树只对实现 `[LAYOUT_NODE]` 的组件下钻，transcript 的 `documentContainer` 是 plain Container → 嵌套 ScrollView 永远不在 wheel 搜索集；② ScrollView 的 `render()` 返回全部行，视口裁剪在 `layoutComponent` 的 scroll 节点分支——不进 layout 树就没有固定高度；③ 要生效必须让 LAYOUT_NODE 贯穿 pi 的容器链 = prototype patch = 违反契约 #1。**替代实现**：wheel 事件经 `parseWheelEvent → dispatchMouseToLayout → Container.handleMouse 逐层委托`到达我们的 GroupLine（源码验证），自管 scrollTop；**contain 语义**——到边界仍消费事件（`render:false`），transcript 绝不跟着跳；短内容返回 `undefined` 放行给全局滚动。若未来 pi 让工具卡参与 layout，可迁回 ScrollView。
 
 ## 4. 出处（Provenance）
 

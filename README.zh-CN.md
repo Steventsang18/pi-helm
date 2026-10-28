@@ -92,6 +92,7 @@ Plan:
     "neverFold": ["task"],
     "autoRow": true,
     "defaultExpand": false,
+    "pinnedBodyHeight": 14,
     "lang": "zh",
     "style": { "marker": "▸", "icons": { "bash": "⚡" } }
   }
@@ -107,6 +108,7 @@ Plan:
 | `neverFold` | `[]` | 保持原生渲染、不折叠的工具名 |
 | `autoRow` | `true` | 单调用组不再折成 `▸ 1 call`，直接显示那行（`└ ✓ bash …`） |
 | `defaultExpand` | `false` | 新分组默认展开（`▾` 头 + 每成员一行明细）；默认仍是折叠，点头部才展开 |
+| `pinnedBodyHeight` | `14` | edit/write 卡片的滚动视口高度（4–40）；短内容不滚动，超过才滚 |
 | `lang` | `"zh"` | 界面语言默认值；会话内用 `/lang zh\|en` 切换 |
 | `style` | `{}` | DIY 显示层：`marker`/`openMarker`/`rowGutter`/`sep`/`icons` 逐项覆盖内置风格，未知/空值不生效；颜色仍走 pi 语义 token（深浅主题自适应） |
 

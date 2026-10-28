@@ -386,3 +386,143 @@ test("shortenPath: home dir collapses to ~, odd values pass through", async () =
 	assert.equal(shortenPath("relative/path"), "relative/path");
 	assert.equal(detailOf("edit", { path: `${homedir()}/README.zh-CN.md` }), "~/README.zh-CN.md");
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 003: pinned (edit/write) scrollable box — fixed viewport + wheel
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Render a pinned edit result with an N-line diff through a fresh resolver. */
+function pinnedBox(lineCount: number, bodyHeight = 5, callId = "e1") {
+	const registry = new GroupRegistry();
+	const resolver = createToolResolver({ registry, enabled: () => true, bodyHeight: () => bodyHeight });
+	const mine = resolver("edit", () => undefined) as any;
+	const diff = Array.from({ length: lineCount }, (_, i) => `+line${i + 1}`).join("\n");
+	const ctx = { toolCallId: callId, args: { path: "/x.ts" }, isError: false, durationMs: 300, invalidate: () => {} };
+	const component = mine.renderResult(
+		{ content: [{ type: "text", text: "ok" }], details: { diff } },
+		{ expanded: false, isPartial: false },
+		th,
+		ctx,
+	);
+	return component;
+}
+
+test("003 header: total line count in the tail (zh/en)", () => {
+	assert.equal(
+		fmtPinned({ status: "ok", toolName: "edit", label: "~/x.ts", totalLines: 142 }, th),
+		"✓ edit ~/x.ts · 142 lines",
+	);
+	assert.equal(
+		fmtPinned({ status: "ok", toolName: "edit", label: "~/x.ts", totalLines: 3, durationMs: 300 }, th),
+		"✓ edit ~/x.ts · 300ms · 3 lines",
+	);
+	assert.equal(fmtPinned({ status: "ok", toolName: "edit", totalLines: 1 }, th), "✓ edit", "single line: no count");
+	assert.equal(fmtPinned({ status: "ok", toolName: "edit", totalLines: 0 }, th), "✓ edit", "empty: no count");
+});
+
+test("003 short body: natural height, no scroll indicators (acceptance 1)", () => {
+	const component = pinnedBox(3, 5, "t003-short"); // 3 lines, viewport 5
+	const lines = component.render(120);
+	assert.equal(lines.length, 4, "header + 3 body lines, nothing else");
+	assert.doesNotMatch(lines.join("\n"), /▲|▼/, "no indicators for short content");
+	// wheel must fall through to pi's global scroll
+	assert.equal(component.handleMouse({ type: "wheel", button: 64, y: 1, wheelDelta: 3 }), undefined);
+});
+
+test("003 long body: fixed viewport + below indicator + header count (acceptance 2)", () => {
+	const component = pinnedBox(20, 5, "t003-long");
+	const lines = component.render(120);
+	assert.equal(lines.length, 7, "header + 5 viewport lines + below indicator");
+	assert.match(lines[0], /20 lines/, "header carries total line count");
+	assert.match(lines[6], /▼ 15 below/, "below indicator (last line) counts hidden lines");
+	assert.doesNotMatch(lines.join("\n"), /▲/, "nothing above at top position");
+	assert.match(lines[1], /line1/, "viewport starts at the top");
+	assert.doesNotMatch(lines.join("\n"), /line6/, "line 6 stays outside the 5-line viewport");
+});
+
+test("003 wheel: consumes and scrolls the viewport", () => {
+	const component = pinnedBox(20, 5, "t003-wheel");
+	const first = component.render(120).join("\n");
+	assert.match(first, /line1/);
+
+	const result = component.handleMouse({ type: "wheel", button: 64, y: 2, wheelDelta: 3 }) as any;
+	assert.equal(result.handled, true, "scrollable box consumes the wheel");
+	assert.equal(result.render, true);
+
+	const after = component.render(120).join("\n");
+	assert.match(after, /▲ 3 above/, "above indicator appears");
+	assert.match(after, /▼ 12 below/, "below count shrinks");
+	assert.match(after, /line4/, "viewport moved by 3");
+	assert.doesNotMatch(after, /line1\b/, "line 1 scrolled out");
+});
+
+test("003 wheel: clamps at both boundaries, still consumes (contain semantics)", () => {
+	const component = pinnedBox(20, 5, "t003-clamp");
+	// scroll far past the end → clamp at max (20-5=15)
+	component.handleMouse({ type: "wheel", button: 64, y: 2, wheelDelta: 100 });
+	const bottom = component.render(120).join("\n");
+	assert.match(bottom, /▲ 15 above/);
+	assert.doesNotMatch(bottom, /▼/, "no hidden lines at the bottom");
+	assert.match(bottom, /line16/, "clamped at last full viewport");
+
+	// at the boundary: still consumes (render:false) so the transcript never jumps
+	const atEdge = component.handleMouse({ type: "wheel", button: 64, y: 2, wheelDelta: 5 }) as any;
+	assert.equal(atEdge.handled, true, "boundary still consumes (contain, acceptance 4)");
+	assert.equal(atEdge.render, false, "nothing moved → no repaint");
+
+	// scroll far up → clamp at 0
+	component.handleMouse({ type: "wheel", button: 64, y: 2, wheelDelta: -100 });
+	const top = component.render(120).join("\n");
+	assert.match(top, /line1/, "clamped back at the top");
+	assert.doesNotMatch(top, /▲/, "no above indicator at top");
+});
+
+test("003 wheel: negative delta scrolls up", () => {
+	const component = pinnedBox(20, 5, "t003-up");
+	component.handleMouse({ type: "wheel", button: 64, y: 2, wheelDelta: 10 });
+	assert.match(component.render(120).join("\n"), /▲ 10 above/);
+	component.handleMouse({ type: "wheel", button: 65, y: 2, wheelDelta: -4 });
+	const up = component.render(120).join("\n");
+	assert.match(up, /▲ 6 above/, "scrolled back up by 4");
+	assert.match(up, /line7/, "viewport moved up");
+});
+
+test("003 shrink: content below viewport clears stale scroll state", () => {
+	const component = pinnedBox(20, 5, "t003-shrink");
+	component.handleMouse({ type: "wheel", button: 64, y: 2, wheelDelta: 8 });
+	assert.match(component.render(120).join("\n"), /▲ 8 above/);
+
+	// same callId re-renders with a SHORT result (stale scroll must not apply)
+	const registry = new GroupRegistry();
+	const resolver = createToolResolver({ registry, enabled: () => true, bodyHeight: () => 5 });
+	const mine = resolver("edit", () => undefined) as any;
+	const ctx = { toolCallId: "t003-shrink", args: { path: "/x.ts" }, isError: false, durationMs: 1, invalidate: () => {} };
+	const comp2 = mine.renderResult(
+		{ content: [{ type: "text", text: "ok" }], details: { diff: "+only\n-two" } },
+		{ expanded: false, isPartial: false },
+		th,
+		ctx,
+	);
+	const out = comp2.render(120).join("\n");
+	assert.match(out, /\+only/, "fresh short content renders fully from the top");
+	assert.doesNotMatch(out, /▲|▼/, "no indicators once content fits");
+});
+
+test("003 dispose: session_shutdown clears pinned scroll state", async () => {
+	const { disposeAllRenderers } = await import("../src/renderers.ts");
+	const component = pinnedBox(20, 5, "t003-dispose");
+	component.handleMouse({ type: "wheel", button: 64, y: 2, wheelDelta: 6 });
+	assert.match(component.render(120).join("\n"), /▲ 6 above/);
+
+	disposeAllRenderers();
+	// the map is cleared — a fresh render of the same call starts at the top
+	assert.match(component.render(120).join("\n"), /line1/, "scroll state reset after dispose");
+	assert.doesNotMatch(component.render(120).join("\n"), /▲/, "no stale above indicator");
+});
+
+test("003 bodyHeight: configurable viewport (acceptance 2)", () => {
+	const tall = pinnedBox(30, 12, "t003-tall");
+	const lines = tall.render(120);
+	assert.equal(lines.length, 14, "header + 12 viewport lines + below indicator");
+	assert.match(lines[13], /▼ 18 below/);
+});

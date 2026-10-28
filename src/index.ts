@@ -269,6 +269,8 @@ interface HelmConfig {
 	autoRow: boolean;
 	/** New groups open at level 1 (▾ + per-call rows) instead of folded. */
 	defaultExpand: boolean;
+	/** Viewport height for scrollable edit/write boxes (Task 003). */
+	pinnedBodyHeight: number;
 	/** Interface language: settings default; `/lang` flips it for the session. */
 	lang: Lang;
 	/** Built-in style + settings.json DIY overrides (contract: same namespace). */
@@ -285,6 +287,7 @@ const cfg: HelmConfig = {
 	neverFold: [],
 	autoRow: true,
 	defaultExpand: false,
+	pinnedBodyHeight: 14,
 	lang: "zh",
 	style: DEFAULT_STYLE,
 };
@@ -307,6 +310,9 @@ function applyConfig(raw: any) {
 	if (Array.isArray(raw.neverFold)) cfg.neverFold = raw.neverFold.filter((x: unknown): x is string => typeof x === "string");
 	if (typeof raw.autoRow === "boolean") cfg.autoRow = raw.autoRow;
 	if (typeof raw.defaultExpand === "boolean") cfg.defaultExpand = raw.defaultExpand;
+	if (typeof raw.pinnedBodyHeight === "number" && Number.isFinite(raw.pinnedBodyHeight)) {
+		cfg.pinnedBodyHeight = Math.max(4, Math.min(40, Math.floor(raw.pinnedBodyHeight)));
+	}
 	if (raw.lang === "zh" || raw.lang === "en") cfg.lang = raw.lang;
 	if (raw.style && typeof raw.style === "object") cfg.style = mergeStyle(raw.style);
 }
@@ -514,6 +520,7 @@ export default function (pi: ExtensionAPI) {
 			enabled: () => cfg.enabled && cfg.fold,
 			neverFold: cfg.neverFold,
 			style: cfg.style,
+			bodyHeight: () => cfg.pinnedBodyHeight,
 		}),
 	);
 

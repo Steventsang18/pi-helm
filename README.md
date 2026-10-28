@@ -92,6 +92,7 @@ Config (`~/.pi/agent/settings.json`, requires a pi **restart** — `/reload` can
     "neverFold": ["task"],
     "autoRow": true,
     "defaultExpand": false,
+    "pinnedBodyHeight": 14,
     "lang": "en",
     "style": { "marker": "▸", "icons": { "bash": "⚡" } }
   }
@@ -107,6 +108,7 @@ Config (`~/.pi/agent/settings.json`, requires a pi **restart** — `/reload` can
 | `neverFold` | `[]` | Tool names that keep their own rendering untouched |
 | `autoRow` | `true` | A one-call group skips the `▸ 1 call` wrapper and shows its row directly (`└ ✓ bash …`) |
 | `defaultExpand` | `false` | New groups open expanded (`▾` header + one row per call); default stays folded until the header is clicked |
+| `pinnedBodyHeight` | `14` | Viewport height (4–40) for the edit/write scroll box; short bodies stay natural-height, only longer ones scroll |
 | `lang` | `"en"` | Interface language default; flip per session with `/lang zh\|en` |
 | `style` | `{}` | DIY display layer: override `marker`/`openMarker`/`rowGutter`/`sep`/`icons` item by item; unknown/empty values are ignored; colors stay pi semantic theme tokens (dark/light safe) |
 

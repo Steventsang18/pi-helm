@@ -150,6 +150,8 @@ export interface PinnedParts {
 	outcome?: string;
 	durationMs?: number;
 	usage?: { input: number; output: number };
+	/** Total body lines — shown in the header tail when > 1 (`· 142 lines`). */
+	totalLines?: number;
 }
 
 /** Header of an always-shown tool card (edit/write: the diff is the point). */
@@ -167,6 +169,7 @@ export function fmtPinned(parts: PinnedParts, theme: ThemeLike, style: Style = D
 		parts.outcome,
 		parts.usage ? `↑${fmtTokens(parts.usage.input)} ↓${fmtTokens(parts.usage.output)}` : undefined,
 		fmtDuration(parts.durationMs) || undefined,
+		parts.totalLines !== undefined && parts.totalLines > 1 ? words().lines(parts.totalLines) : undefined,
 	]
 		.filter((s): s is string => typeof s === "string" && s.length > 0)
 		.map((s) => theme.fg(glyph.color, s))
@@ -375,10 +378,16 @@ export class GroupLine {
 	private hits: (Hit | null)[] = [];
 	private readonly buildView: () => CallView;
 	private readonly onHit: (hit: Hit) => void;
+	private readonly onWheel?: (delta: number) => { handled: boolean; render: boolean } | undefined;
 
-	constructor(buildView: () => CallView, onHit: (hit: Hit) => void) {
+	constructor(
+		buildView: () => CallView,
+		onHit: (hit: Hit) => void,
+		onWheel?: (delta: number) => { handled: boolean; render: boolean } | undefined,
+	) {
 		this.buildView = buildView;
 		this.onHit = onHit;
+		this.onWheel = onWheel;
 	}
 
 	render(width: number): string[] {
@@ -387,7 +396,13 @@ export class GroupLine {
 		return view.lines.map((l) => clipLine(l, width));
 	}
 
-	handleMouse(event: { type: string; button: string; y: number }): { handled: boolean; render: boolean } | undefined {
+	handleMouse(event: { type: string; button: string; y: number; wheelDelta?: number }): { handled: boolean; render: boolean } | undefined {
+		// Wheel: only the scrollable pinned box consumes it (contain semantics —
+		// at the boundary we still consume so the transcript never jumps).
+		// Returning undefined lets the event fall through to pi's global scroll.
+		if (event.type === "wheel") {
+			return this.onWheel?.(event.wheelDelta ?? 0);
+		}
 		if (event.type !== "click" || event.button !== "left") return undefined;
 		if (event.y < 0 || event.y >= this.hits.length) return undefined;
 		const hit = this.hits[event.y];
@@ -421,6 +436,8 @@ export interface ResolverOptions {
 	now?: () => number;
 	/** Display style (glyphs/icons/separators) — settings.json DIY layer. */
 	style?: Style;
+	/** Viewport height for scrollable pinned boxes (Task 003). */
+	bodyHeight?: () => number;
 }
 
 /** Per-call live bookkeeping: the 1s clock and the reveal timer. */
@@ -428,6 +445,11 @@ const clocks = new Map<string, ReturnType<typeof setInterval>>();
 const reveals = new Map<string, ReturnType<typeof setTimeout>>();
 const componentsByCallId = new Map<string, Set<GroupLine>>();
 const expandedSeen = new Map<string, boolean>();
+/** Pinned-box scroll position per call (Task 003). Cleared on session_shutdown. */
+const pinnedScroll = new Map<string, number>();
+
+/** Default viewport height for scrollable pinned boxes (Task 003). */
+export const DEFAULT_PINNED_BODY_HEIGHT = 14;
 
 function rememberComponent(id: string, component: GroupLine): void {
 	let set = componentsByCallId.get(id);
@@ -488,11 +510,13 @@ export function disposeAllRenderers(): void {
 	reveals.clear();
 	componentsByCallId.clear();
 	expandedSeen.clear();
+	pinnedScroll.clear();
 }
 
 export function createToolResolver(options: ResolverOptions) {
 	const { registry } = options;
 	const style = options.style ?? DEFAULT_STYLE;
+	const bodyHeight = options.bodyHeight ?? (() => DEFAULT_PINNED_BODY_HEIGHT);
 	const now = options.now ?? (() => Date.now());
 
 	const isDrawn = (toolName: string): boolean => {
@@ -560,6 +584,19 @@ export function createToolResolver(options: ResolverOptions) {
 		const hits: (Hit | null)[] = [];
 
 		if (registry.isPinned(id)) {
+			// Task 003: fixed-height viewport + wheel scroll for long bodies.
+			// Short bodies keep natural height (no indicators, no scroll state).
+			const body = phase === "running" ? argsLines(args) : bodyLines(result);
+			const total = body.length;
+			const cap = Math.max(1, bodyHeight());
+			const scrollable = total > cap;
+			let scrollTop = 0;
+			if (scrollable) {
+				scrollTop = Math.min(pinnedScroll.get(id) ?? 0, total - cap);
+				pinnedScroll.set(id, scrollTop);
+			} else {
+				pinnedScroll.delete(id); // content shrank — drop stale position
+			}
 			lines.push(
 				fmtPinned(
 					{
@@ -570,15 +607,25 @@ export function createToolResolver(options: ResolverOptions) {
 						outcome: parts.outcome,
 						durationMs: parts.durationMs,
 						usage: parts.usage,
+						totalLines: total,
 					},
 					theme,
 					style,
 				),
 			);
 			hits.push(null);
-			const body = phase === "running" ? argsLines(args) : bodyLines(result);
-			for (const line of body) {
+			const visible = scrollable ? body.slice(scrollTop, scrollTop + cap) : body;
+			if (scrollTop > 0) {
+				lines.push(theme.fg("dim", words().moreAbove(scrollTop)));
+				hits.push(null);
+			}
+			for (const line of visible) {
 				lines.push(theme.fg("toolOutput", line));
+				hits.push(null);
+			}
+			const below = total - scrollTop - visible.length;
+			if (below > 0) {
+				lines.push(theme.fg("dim", words().moreBelow(below)));
 				hits.push(null);
 			}
 			return { lines, hits };
@@ -615,6 +662,24 @@ export function createToolResolver(options: ResolverOptions) {
 		invalidate: () => void,
 		revealIn?: number,
 	): GroupLine => {
+		// Task 003: wheel consumer for scrollable pinned boxes. Contain
+		// semantics — at the boundary we still consume the event so the
+		// transcript never jumps under the cursor (acceptance 4). Short
+		// bodies return undefined → pi's global scroll keeps working.
+		const onWheel = registry.isPinned(id)
+			? (delta: number): { handled: boolean; render: boolean } | undefined => {
+					const body = phase === "running" ? argsLines(args) : bodyLines(result);
+					const cap = Math.max(1, bodyHeight());
+					const total = body.length;
+					if (total <= cap) return undefined;
+					const current = pinnedScroll.get(id) ?? 0;
+					const max = total - cap;
+					const next = Math.min(max, Math.max(0, current + delta));
+					if (next === current) return { handled: true, render: false }; // at edge: swallow
+					pinnedScroll.set(id, next);
+					return { handled: true, render: true };
+				}
+			: undefined;
 		const component = new GroupLine(
 			() => viewOf(id, toolName, args, result, phase, theme, durationMs),
 			(hit) => {
@@ -623,6 +688,7 @@ export function createToolResolver(options: ResolverOptions) {
 				else registry.noteSetExpanded(id, false, true);
 				tickGroup(registry, id, invalidate);
 			},
+			onWheel,
 		);
 		rememberComponent(id, component);
 		if (phase === "running") ensureClock(registry, id, invalidate);

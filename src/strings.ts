@@ -37,6 +37,9 @@ interface Words {
 	runningFor(duration: string): string;
 	/** Outcome: live but no clock yet (rare — first frame before startedAt). */
 	inProgress: string;
+	/** Scroll indicator: lines hidden above / below the pinned box viewport. */
+	moreAbove(n: number): string;
+	moreBelow(n: number): string;
 	/** Outcome: nothing to say (kept as the loanword in both languages). */
 	ok: string;
 	/** reason-first fallback: what this tool call *does*, by tool name. */
@@ -51,6 +54,8 @@ const EN: Words = {
 	done: "done",
 	runningFor: (d) => `running ${d}`,
 	inProgress: "running",
+	moreAbove: (n) => `▲ ${n} above`,
+	moreBelow: (n) => `▼ ${n} below (wheel)`,
 	ok: "ok",
 	describe: (tool) => {
 		switch (tool) {
@@ -83,6 +88,8 @@ const ZH: Words = {
 	done: "完成",
 	runningFor: (d) => `运行中 ${d}`,
 	inProgress: "运行中",
+	moreAbove: (n) => `▲ 上 ${n} 行`,
+	moreBelow: (n) => `▼ 下 ${n} 行 (滚轮)`,
 	ok: "ok",
 	describe: (tool) => {
 		switch (tool) {

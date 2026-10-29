@@ -25,7 +25,7 @@
 
 ## 安装
 
-需要 pi 1.3.0 或更新版本。
+已在 pi 1.3.0 测试通过。
 
 ```bash
 pi install /path/to/pi-helm

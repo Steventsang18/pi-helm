@@ -25,7 +25,7 @@ Zero runtime dependencies beyond Pi's own packages. Pure rendering: no Pi source
 
 ## Install
 
-Requires pi 1.3.0 or newer.
+Tested with pi 1.3.0.
 
 ```bash
 pi install /path/to/pi-helm

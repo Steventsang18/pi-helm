@@ -20,7 +20,7 @@ import {
 } from "./groups.ts";
 import { homedir } from "os";
 import { words } from "./strings.ts";
-import { DEFAULT_STYLE, type Style } from "./styles.ts";
+import { DEFAULT_STYLE, spinnerFrame, SPINNER_FRAME_MS, type Style } from "./styles.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme-like interface (the real Theme structurally satisfies this)
@@ -60,6 +60,8 @@ export function fmtSummaryLine(
 	level: 0 | 1,
 	theme: ThemeLike,
 	style: Style = DEFAULT_STYLE,
+	/** Spinner frame for the live `running` segment (defaults to the clock's frame). */
+	frame?: string,
 ): string {
 	const marker = theme.fg(level === 0 ? "accent" : "warning", level === 0 ? style.marker : style.openMarker);
 	const head = `${marker} ${theme.bold(words().calls(summary.count))}`;
@@ -69,7 +71,7 @@ export function fmtSummaryLine(
 		parts.push(theme.fg("dim", summary.breakdown.map((e) => `${style.icons[e.name] ?? e.name}×${e.count}`).join(" ")));
 	}
 	if (summary.failed > 0) parts.push(theme.fg("error", `✗ ${words().failed(summary.failed)}`));
-	if (summary.running > 0) parts.push(theme.fg("warning", `● ${words().running(summary.running)}`));
+	if (summary.running > 0) parts.push(theme.fg("warning", `${frame ?? spinnerFrame(Date.now(), style.spinner)} ${words().running(summary.running)}`));
 	if (summary.usage) {
 		parts.push(theme.fg("dim", `↑${fmtTokens(summary.usage.input)} ↓${fmtTokens(summary.usage.output)}`));
 	}
@@ -80,6 +82,8 @@ export function fmtSummaryLine(
 export interface RowParts {
 	status: ToolStatus;
 	toolName: string;
+	/** Spinner frame for a running call (clock-derived by viewOf; tests pin it). */
+	frame?: string;
 	/** The goal phrase the schema injection collected: `[check test failures]`. */
 	reasoning?: string;
 	/**
@@ -100,8 +104,17 @@ export interface RowParts {
 const GLYPH: Record<ToolStatus, { mark: string; color: string }> = {
 	ok: { mark: "✓", color: "success" },
 	error: { mark: "✗", color: "error" },
+	// `running` is animated: fmtRow/fmtPinned swap in the clock-derived frame
+	// (see spinnerFrame). This mark is the static fallback only.
 	running: { mark: "●", color: "warning" },
 };
+
+/** The glyph for a status; a running call animates through the spinner frames. */
+function glyphFor(status: ToolStatus, frame?: string, style: Style = DEFAULT_STYLE): { mark: string; color: string } {
+	const base = GLYPH[status];
+	if (status !== "running") return base;
+	return { mark: frame ?? spinnerFrame(Date.now(), style.spinner), color: base.color };
+}
 
 /** Format token count compactly: 1234 → "1.2k", 999999 → "999k". */
 function fmtTokens(n: number): string {
@@ -115,7 +128,7 @@ function fmtTokens(n: number): string {
  * `└ ✓ bash [check test failures] pnpm test · exit 1 · ↑1.2k ↓169 · 1.8s`
  */
 export function fmtRow(parts: RowParts, theme: ThemeLike, gutter = true, style: Style = DEFAULT_STYLE): string {
-	const glyph = GLYPH[parts.status];
+	const glyph = glyphFor(parts.status, parts.frame, style);
 	const reasonSlot = parts.reasoning
 		? theme.fg("accent", `[${parts.reasoning}]`)
 		: parts.desc
@@ -145,6 +158,8 @@ export interface PinnedParts {
 	status: ToolStatus;
 	toolName: string;
 	icon?: string;
+	/** Spinner frame for a running call (clock-derived by viewOf; tests pin it). */
+	frame?: string;
 	/** Target of the call: path etc. */
 	label?: string;
 	outcome?: string;
@@ -156,7 +171,7 @@ export interface PinnedParts {
 
 /** Header of an always-shown tool card (edit/write: the diff is the point). */
 export function fmtPinned(parts: PinnedParts, theme: ThemeLike, style: Style = DEFAULT_STYLE): string {
-	const glyph = GLYPH[parts.status];
+	const glyph = glyphFor(parts.status, parts.frame, style);
 	const head = [
 		theme.fg(glyph.color, glyph.mark),
 		parts.icon,
@@ -440,7 +455,7 @@ export interface ResolverOptions {
 	bodyHeight?: () => number;
 }
 
-/** Per-call live bookkeeping: the 1s clock and the reveal timer. */
+/** Per-call live bookkeeping: the running clock and the reveal timer. */
 const clocks = new Map<string, ReturnType<typeof setInterval>>();
 const reveals = new Map<string, ReturnType<typeof setTimeout>>();
 const componentsByCallId = new Map<string, Set<GroupLine>>();
@@ -476,9 +491,20 @@ function tickGroup(registry: GroupRegistry, id: string, invalidate: () => void):
 	invalidate();
 }
 
+/**
+ * Test seam: how many animation/timer handles this layer currently owns.
+ * Zero once every running call settled and the session shut down (contract #7).
+ */
+export function activeTimerCount(): { clocks: number; reveals: number } {
+	return { clocks: clocks.size, reveals: reveals.size };
+}
+
 function ensureClock(registry: GroupRegistry, id: string, invalidate: () => void): void {
 	if (clocks.has(id)) return;
-	const timer = setInterval(() => tickGroup(registry, id, invalidate), 1000);
+	// One interval per running call, at spinner speed: the frame is derived from
+	// the clock, so the repaint rate and the animation rate must match or the
+	// spinner stutters. Cleared on settle (clearClock) and on shutdown.
+	const timer = setInterval(() => tickGroup(registry, id, invalidate), SPINNER_FRAME_MS);
 	timer.unref?.(); // never hold the process open on our account
 	clocks.set(id, timer);
 }
@@ -567,6 +593,8 @@ export function createToolResolver(options: ResolverOptions) {
 		const parts: RowParts = {
 			status: phase === "running" ? "running" : phase === "error" ? "error" : "ok",
 			toolName,
+			// the single place a frame is derived for this call: same instant, same frame
+			frame: phase === "running" ? spinnerFrame(now(), style.spinner) : undefined,
 			// reason-first: the model's phrase wins, the catalog describes the rest
 			reasoning,
 			desc: reasoning ? undefined : words().describe(toolName),
@@ -602,6 +630,7 @@ export function createToolResolver(options: ResolverOptions) {
 					{
 						status: parts.status,
 						toolName,
+						frame: parts.frame,
 						icon: style.icons[toolName],
 						label: parts.detail,
 						outcome: parts.outcome,
@@ -633,7 +662,7 @@ export function createToolResolver(options: ResolverOptions) {
 
 		if (plan.header) {
 			const summary = registry.summary(id) ?? buildSummary(registry.membersOf(id) ?? []);
-			lines.push(fmtSummaryLine(summary, plan.header === "closed" ? 0 : 1, theme, style));
+			lines.push(fmtSummaryLine(summary, plan.header === "closed" ? 0 : 1, theme, style, spinnerFrame(now(), style.spinner)));
 			hits.push("toggle-header");
 		}
 		if (plan.full) {

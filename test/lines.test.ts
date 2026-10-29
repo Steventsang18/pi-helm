@@ -4,8 +4,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GroupLine, createToolResolver, fmtDuration, fmtPinned, fmtRow, fmtSummaryLine, outcomeOf, stringWidth, type ThemeLike } from "../src/renderers.ts";
+import { GroupLine, activeTimerCount, createToolResolver, disposeAllRenderers, fmtDuration, fmtPinned, fmtRow, fmtSummaryLine, outcomeOf, stringWidth, type ThemeLike } from "../src/renderers.ts";
 import { GroupRegistry, buildSummary, type GroupSummary, type ToolCallRecord } from "../src/groups.ts";
+import { DEFAULT_SPINNER } from "../src/styles.ts";
 
 /** Identity theme: assert on the plain text shape. */
 const th: ThemeLike = {
@@ -39,9 +40,32 @@ const summary: GroupSummary = {
 	durationMs: 1200,
 };
 
+test("spinner ticker: one clock per running call, cleared when it settles (no leak)", async () => {
+	disposeAllRenderers();
+	const registry = new GroupRegistry();
+	const resolver = createToolResolver({ registry, enabled: () => true });
+	const mine = resolver("bash", () => undefined) as any;
+	const ctx = { toolCallId: "spin-1", args: { command: "sleep 5" }, isPartial: true, expanded: false, invalidate: () => {} };
+
+	assert.deepEqual(activeTimerCount(), { clocks: 0, reveals: 0 }, "factory starts no timers");
+	mine.renderCall(ctx.args, th, ctx);
+	assert.equal(activeTimerCount().clocks, 1, "a running call owns exactly one clock");
+
+	const done = { ...ctx, isPartial: false, durationMs: 10, isError: false };
+	mine.renderResult({ content: [] }, { expanded: false, isPartial: false }, th, done);
+	assert.equal(activeTimerCount().clocks, 0, "settling clears the clock");
+
+	disposeAllRenderers();
+	assert.deepEqual(activeTimerCount(), { clocks: 0, reveals: 0 }, "shutdown leaves nothing behind (contract #7)");
+});
+
+// Running segments now animate: assert against an explicit frame so the test
+// never depends on the wall clock (spec: fixed now → deterministic frame).
+const F0 = "⠋"; // spinnerFrame(0) === frames[0]
+
 test("fmtSummaryLine: marker, count, icon breakdown, failed, running, duration", () => {
-	assert.equal(fmtSummaryLine(summary, 0, th), "▸ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ● 1 running · 1.2s");
-	assert.equal(fmtSummaryLine(summary, 1, th), "▾ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ● 1 running · 1.2s");
+	assert.equal(fmtSummaryLine(summary, 0, th, undefined, F0), "▸ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ⠋ 1 running · 1.2s");
+	assert.equal(fmtSummaryLine(summary, 1, th, undefined, F0), "▾ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ⠋ 1 running · 1.2s");
 });
 
 test("fmtSummaryLine: unknown tools keep their name in the breakdown", () => {
@@ -54,12 +78,12 @@ test("fmtSummaryLine: zh words (setLang) and DIY style glyphs", async () => {
 	const { mergeStyle } = await import("../src/styles.ts");
 	setLang("zh");
 	try {
-		assert.equal(fmtSummaryLine(summary, 0, th), "▸ 5 次调用 · ⚡×3 📖×2 · ✗ 2 次失败 · ● 1 个运行中 · 1.2s");
+		assert.equal(fmtSummaryLine(summary, 0, th, undefined, F0), "▸ 5 次调用 · ⚡×3 📖×2 · ✗ 2 次失败 · ⠋ 1 个运行中 · 1.2s");
 	} finally {
 		setLang("en");
 	}
 	const diy = mergeStyle({ marker: "❯", openMarker: "⌄", rowGutter: "┆", sep: "|", icons: { bash: "BASH" } });
-	assert.equal(fmtSummaryLine(summary, 0, th, diy), "❯ 5 calls | BASH×3 📖×2 | ✗ 2 failed | ● 1 running | 1.2s");
+	assert.equal(fmtSummaryLine(summary, 0, th, diy, F0), "❯ 5 calls | BASH×3 📖×2 | ✗ 2 failed | ⠋ 1 running | 1.2s");
 	// custom icon never drops the other defaults
 	assert.equal(diy.icons.read, "📖");
 });
@@ -94,10 +118,10 @@ test("fmtRow: ok glyph, no reasoning, no gutter on request", () => {
 	assert.equal(fmtRow({ status: "ok", toolName: "read", outcome: "12 lines" }, th, false), "✓ read · 12 lines");
 });
 
-test("fmtRow: running glyph and live outcome", () => {
+test("fmtRow: running glyph is the spinner frame and live outcome", () => {
 	assert.equal(
-		fmtRow({ status: "running", toolName: "bash", detail: "pnpm test", outcome: "running 2s" }, th),
-		"└ ● bash pnpm test · running 2s",
+		fmtRow({ status: "running", toolName: "bash", detail: "pnpm test", outcome: "running 2s", frame: F0 }, th),
+		"└ ⠋ bash pnpm test · running 2s",
 	);
 });
 
@@ -233,10 +257,10 @@ test("resolver: ctrl+o style expanded flips are translated, per-call", () => {
 test("fmtRow: running glyph is ●, includes token usage ↑↓ when present", () => {
 	assert.equal(
 		fmtRow(
-			{ status: "running", toolName: "bash", detail: "pnpm test", outcome: "running 2s", usage: { input: 1200, output: 169 } },
+			{ status: "running", toolName: "bash", detail: "pnpm test", outcome: "running 2s", usage: { input: 1200, output: 169 }, frame: F0 },
 			th,
 		),
-		"└ ● bash pnpm test · running 2s · ↑1.2k ↓169",
+		"└ ⠋ bash pnpm test · running 2s · ↑1.2k ↓169",
 	);
 });
 
@@ -274,6 +298,50 @@ test("buildSummary: aggregates usage across members", () => {
 test("buildSummary: no usage → usage field undefined", () => {
 	const s = buildSummary([{ callId: "1", toolName: "bash", status: "ok" }]);
 	assert.equal(s.usage, undefined);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Running spinner (Task: spinner animation, spec-fixed frame from the clock)
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("spinnerFrame: clock-derived index, 180ms per frame, wraps both ways", async () => {
+	const { spinnerFrame, SPINNER_FRAME_MS, DEFAULT_SPINNER } = await import("../src/styles.ts");
+	assert.equal(SPINNER_FRAME_MS, 180);
+	assert.equal(DEFAULT_SPINNER.length, 10);
+	// fixed instants → deterministic frames (no flakiness)
+	assert.equal(spinnerFrame(0), "⠋");
+	assert.equal(spinnerFrame(179), "⠋", "still frame 0 just before the tick");
+	assert.equal(spinnerFrame(180), "⠙");
+	assert.equal(spinnerFrame(180 * 9), "⠏");
+	assert.equal(spinnerFrame(180 * 10), "⠋", "wraps after 10 frames");
+	assert.equal(spinnerFrame(180 * 137), DEFAULT_SPINNER[7], "137 % 10 === 7");
+});
+
+test("spinnerFrame: every frame is exactly one display cell (tmux/SSH safe)", async () => {
+	const { stringWidth } = await import("../src/renderers.ts");
+	for (const frame of DEFAULT_SPINNER) {
+		assert.equal(stringWidth(frame), 1, `frame ${frame} must be single width`);
+	}
+});
+
+test("spinnerFrame: custom frames honored; empty/garbage falls back to braille", async () => {
+	const { spinnerFrame, DEFAULT_SPINNER, mergeStyle } = await import("../src/styles.ts");
+	assert.equal(spinnerFrame(0, ["a", "b"]), "a");
+	assert.equal(spinnerFrame(180, ["a", "b"]), "b");
+	assert.equal(spinnerFrame(360, ["a", "b"]), "a");
+	// mergeStyle: DIY spinner accepted, malformed ignored
+	assert.deepEqual(mergeStyle({ spinner: ["+", "x"] }).spinner, ["+", "x"]);
+	assert.deepEqual(mergeStyle({ spinner: [] }).spinner, DEFAULT_SPINNER, "empty list ignored");
+	assert.deepEqual(mergeStyle({ spinner: [""] }).spinner, DEFAULT_SPINNER, "blank frame ignored");
+	assert.deepEqual(mergeStyle(undefined).spinner, DEFAULT_SPINNER);
+});
+
+test("glossary: GLYPH.running is animated but its static fallback is not used by views", () => {
+	// fmtPinned running uses the frame too (pinned cards while executing)
+	assert.equal(
+		fmtPinned({ status: "running", toolName: "write", icon: "📝", label: "x.ts", outcome: "running 1s", frame: F0 }, th),
+		"⠋ 📝 write x.ts · running 1s",
+	);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

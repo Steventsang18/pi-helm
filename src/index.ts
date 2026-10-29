@@ -34,7 +34,7 @@ import { join } from "node:path";
 import { GroupRegistry, buildSummary, classifyAssistant, rebuildFromEntries, type EntryLike, type ToolCallRecord } from "./groups.ts";
 import { createToolResolver, disposeAllRenderers, fmtSummaryLine, type ThemeLike } from "./renderers.ts";
 import { setLang } from "./strings.ts";
-import { DEFAULT_STYLE, mergeStyle, type Style } from "./styles.ts";
+import { DEFAULT_STYLE, mergeStyle, spinnerFrame, SPINNER_FRAME_MS, type Style } from "./styles.ts";
 
 const STATUS_KEY = "pi-helm:mission";
 const PILL_TYPE = "pi-helm:pill";
@@ -388,10 +388,13 @@ class MissionOverlay {
 		private theme: Theme,
 		private done: () => void,
 	) {
+		// Spinner-speed refresh, but only while something actually runs: an idle
+		// panel needs no repaint (elapsed seconds only tick for running tasks).
 		this.timer = setInterval(() => {
+			if (state.tasks.size === 0) return;
 			this.invalidate();
 			this.tui.requestRender();
-		}, 1000);
+		}, SPINNER_FRAME_MS);
 	}
 
 	handleInput(data: string): void {
@@ -412,10 +415,11 @@ class MissionOverlay {
 	}
 
 	render(width: number): string[] {
-		const key = `${state.version}:${this.sel}:${lang}`;
+		const key = `${state.version}:${this.sel}:${lang}:${this.spinnerFrame()}`;
 		if (this.cache && this.cacheW === width && this.cacheKey === key) return this.cache;
 		const th = this.theme;
 		const tt = t();
+		const frame = this.spinnerFrame();
 		const lines: string[] = [];
 		const inner = Math.max(20, width - 4);
 
@@ -448,7 +452,7 @@ class MissionOverlay {
 		}
 
 		lines.push(
-			th.bold(`│ ${tt.tasks}`) + (state.tasks.size > 0 ? th.fg("warning", `  ▶ ${state.tasks.size} ${tt.running}`) : ""),
+			th.bold(`│ ${tt.tasks}`) + (state.tasks.size > 0 ? th.fg("warning", `  ${frame} ${state.tasks.size} ${tt.running}`) : ""),
 		);
 		const running = [...state.tasks.values()].slice(0, 6);
 		if (running.length === 0) {
@@ -458,7 +462,7 @@ class MissionOverlay {
 				const secs = Math.round((Date.now() - task.startedAt) / 1000);
 				const extra = task.nested > 0 ? th.fg("dim", ` ·${task.nested}↓`) : "";
 				lines.push(
-					`│   ${th.fg("warning", "▶")} ${th.fg("toolOutput", truncateToWidth(task.label, inner - 14))} ${th.fg("dim", `${secs}s`)}${extra}`,
+					`│   ${th.fg("warning", frame)} ${th.fg("toolOutput", truncateToWidth(task.label, inner - 14))} ${th.fg("dim", `${secs}s`)}${extra}`,
 				);
 			}
 		}
@@ -489,6 +493,11 @@ class MissionOverlay {
 		this.cacheW = width;
 		this.cacheKey = key;
 		return lines;
+	}
+
+	/** The running indicator for this instant (idle: the first frame, still). */
+	private spinnerFrame(): string {
+		return state.tasks.size > 0 ? spinnerFrame(Date.now(), cfg.style.spinner) : cfg.style.spinner[0];
 	}
 
 	invalidate(): void {
@@ -744,7 +753,9 @@ export default function (pi: ExtensionAPI) {
 		const summary = registry.attachUsage(buildSummary(turnCalls));
 		// Attach accumulated token usage from assistant messages to the summary
 		if (summary.count >= 2 || summary.failed > 0) {
-			pushPoint(summary.failed > 0 ? "error" : "milestone", fmtSummaryLine(summary, 0, plainTheme, cfg.style));
+			// Historical key point: use the first frame (a rotating glyph would imply
+			// this settled record is still live).
+			pushPoint(summary.failed > 0 ? "error" : "milestone", fmtSummaryLine(summary, 0, plainTheme, cfg.style, cfg.style.spinner[0]));
 		}
 		turnCalls = [];
 		// turn-diff auto pill (pi-tidy /diff idea, stamped automatically)

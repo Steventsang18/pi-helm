@@ -94,7 +94,7 @@ Plan:
     "defaultExpand": false,
     "pinnedBodyHeight": 14,
     "lang": "zh",
-    "style": { "marker": "▸", "icons": { "bash": "⚡" } }
+    "style": { "marker": "▸", "icons": { "bash": "⚡" }, "spinner": ["⠋", "⠙", "⠹"] }
   }
 }
 ```
@@ -110,7 +110,7 @@ Plan:
 | `defaultExpand` | `false` | 新分组默认展开（`▾` 头 + 每成员一行明细）；默认仍是折叠，点头部才展开 |
 | `pinnedBodyHeight` | `14` | edit/write 卡片的滚动视口高度（4–40）；短内容不滚动，超过才滚 |
 | `lang` | `"zh"` | 界面语言默认值；会话内用 `/lang zh\|en` 切换 |
-| `style` | `{}` | DIY 显示层：`marker`/`openMarker`/`rowGutter`/`sep`/`icons` 逐项覆盖内置风格，未知/空值不生效；颜色仍走 pi 语义 token（深浅主题自适应） |
+| `style` | `{}` | DIY 显示层：`marker`/`openMarker`/`rowGutter`/`sep`/`icons`/`spinner` 逐项覆盖内置风格，未知/空值不生效；颜色仍走 pi 语义 token（深浅主题自适应）。`spinner` 是帧数组（默认 braille `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`，每帧必须单宽，180ms 一帧） |
 
 > **限制**：`hotkey` 与 `enabled`（reasoning 注入）是**注册期**配置，只认全局 `settings.json`（pi 1.3.0 在扩展加载期不给 `getSettings()`，只能直读全局文件）；project settings 里的这两项不生效。其余键（折叠/风格/语言/defaultExpand 等）在 `session_start` 官方重读，project 覆盖正常合并。
 >

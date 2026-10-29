@@ -23,6 +23,32 @@ export interface Style {
 	sep: string;
 	/** Per-tool icon for the summary breakdown and pinned cards. */
 	icons: Record<string, string>;
+	/**
+	 * Animation frames for the running indicator: braille dots by default.
+	 * Every frame must be one display cell wide (tmux/SSH safe); the renderer
+	 * derives the frame from the clock — `frames[floor(now / 180) % len]` —
+	 * so nothing extra is stored and tests can pin `now`.
+	 */
+	spinner: readonly string[];
+}
+
+/**
+ * Braille spinner: 10 single-width frames, the classic safe choice. Terminals
+ * without braille still get one cell (no layout shift), just a less pretty one.
+ */
+export const DEFAULT_SPINNER: readonly string[] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/** ms per spinner frame (~5.6fps: soft enough to read, alive enough to signal work). */
+export const SPINNER_FRAME_MS = 180;
+
+/**
+ * Pure: which spinner frame belongs to an instant. Time-derived (no state), so
+ * two call sites rendering the same frame agree and tests stay deterministic.
+ */
+export function spinnerFrame(nowMs: number, frames: readonly string[] = DEFAULT_SPINNER): string {
+	const list = frames.length > 0 ? frames : DEFAULT_SPINNER;
+	const index = Math.floor(nowMs / SPINNER_FRAME_MS) % list.length;
+	return list[(index + list.length) % list.length];
 }
 
 /** Emoji Presentation set the classic look ships with (also used by pinned cards). */
@@ -42,6 +68,7 @@ export const DEFAULT_STYLE: Style = {
 	rowGutter: "└",
 	sep: "·",
 	icons: TOOL_ICONS,
+	spinner: DEFAULT_SPINNER,
 };
 
 /**
@@ -59,11 +86,18 @@ export function mergeStyle(override: Partial<Style> | undefined | null): Style {
 			if (typeof value === "string" && value.length > 0) icons[key] = value;
 		}
 	}
+	// A DIY spinner must be a non-empty list of non-empty strings; anything
+	// malformed keeps the built-in braille set (a typo must not blank the UI).
+	const spinner =
+		Array.isArray(override.spinner) && override.spinner.length > 0 && override.spinner.every((f) => typeof f === "string" && f.length > 0)
+			? [...override.spinner]
+			: DEFAULT_STYLE.spinner;
 	return {
 		marker: str(override.marker, DEFAULT_STYLE.marker),
 		openMarker: str(override.openMarker, DEFAULT_STYLE.openMarker),
 		rowGutter: str(override.rowGutter, DEFAULT_STYLE.rowGutter),
 		sep: str(override.sep, DEFAULT_STYLE.sep),
 		icons,
+		spinner,
 	};
 }

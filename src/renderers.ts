@@ -91,7 +91,7 @@ export interface RowParts {
 	/** The goal phrase the schema injection collected: `[check test failures]`. */
 	reasoning?: string;
 	/**
-	 * Localized "what this tool does" (`运行命令`) — fills the reason slot
+	 * Localized "what this tool does" (`run command`) — fills the reason slot
 	 * only when the model sent no reasoning: reason-first stays primary, the
 	 * catalog is the deterministic bilingual fallback.
 	 */

@@ -4,7 +4,7 @@
 
 > Terminal sessions get loud: tool calls, diffs, thinking, subagents. pi-helm folds the tool noise into one summary line per reply segment, keeps the rows reason-first, and puts mission state one keystroke away.
 
-*中文版：[README.zh-CN.md](README.zh-CN.md)*
+*Chinese version: [README.zh-CN.md](README.zh-CN.md)*
 
 ---
 
@@ -181,6 +181,94 @@ PI_TUI_WRITE_LOG=1 pi -e .                           # debug the raw ANSI stream
 ```
 
 Design rationale — layering, the No-Fight contract, folding trade-offs and the pi runtime contracts this project depends on — lives in [`DESIGN.md`](DESIGN.md). Official extension/TUI API docs: [pi docs](https://github.com/earendil-works/pi).
+
+Regenerate with: `node scripts/demo-fold.ts --plain`
+
+<details>
+<summary>Preview: every folding state (plain text)</summary>
+
+```
+== [1] Folded group (level 0) — three tool calls between two replies ==
+▸ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+  ← one line: counts, icons, failure count, token usage, duration
+
+== [2] Click the summary (level 1) — one row per call, │ gutter ==
+▾ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+└ ✓ bash [check the working tree] git status --short · 4 lines · 100ms
+└ ✓ read [see what changed] src/app.ts · 120 lines · 30ms
+└ ✗ bash [run the tests] pnpm test · FAIL test/app.test.ts · ↑1.2k ↓169 · 1.8s
+  ← ✓/✗ state, reason phrase, target, outcome, usage, duration per row
+
+== [3] Click a row (level 2) — that call's full output ==
+▾ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+└ ✓ bash [check the working tree] git status --short · 4 lines · 100ms
+└ ✓ read [see what changed] src/app.ts · 120 lines · 30ms
+└ ✗ bash [run the tests] pnpm test · FAIL test/app.test.ts · ↑1.2k ↓169 · 1.8s
+FAIL test/app.test.ts
+AssertionError: expected 1 to be 2
+
+== [4] Ctrl+O collapse-all — back to the summary line ==
+▸ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+
+== [5] edit/write never fold — the diff is the point, and it cuts the group ==
+✓ ✏️ edit src/app.ts · +1/−1 · ↑800 ↓40 · 300ms · 4 lines
+@@ -10,3 +10,3 @@
+- const x = 1;
++ const x = 2;
+ // untouched
+  ← header carries the diff stat, usage and duration; the body is the diff itself
+
+== [6] Long diff — fixed viewport, ▲/▼ indicators, total line count in the header ==
+✓ 📝 write src/big.ts · +30/−0 · ↑2.4k ↓310 · 420ms · 31 lines
+@@ -1,30 +1,30 @@
++ added line 1
++ added line 2
++ added line 3
++ added line 4
++ added line 5
++ added line 6
++ added line 7
++ added line 8
++ added line 9
++ added line 10
++ added line 11
++ added line 12
++ added line 13
+▼ 17 below (wheel)
+  ← viewport capped at pinnedBodyHeight (default 14); the wheel scrolls it
+
+== [7] Anti-flicker — a call under 1s stays hidden; from 1s it surfaces with a live clock ==
+▸ 2 calls · ⚡×2 · ⠴ 2 running
+└ ⠴ bash [rebuild the bundle] pnpm build · running 1.5s
+  ← only the call over 1s appears; the short one is hidden on purpose
+
+== [8] Running spinner — the frame comes from the clock, not from state ==
+  ⠴ @ 0ms   ⠦ @ 180ms   ⠧ @ 360ms   ⠇ @ 540ms   ⠏ @ 720ms
+  ← 180ms per frame, braille, single width (tmux/SSH safe)
+
+== [9] autoRow — a single call shows its row directly, no ▸ 1 call wrapper ==
+└ ✓ read [read the entry point] src/index.ts · 42 lines · 60ms
+  ← one call = nothing worth summarizing; the row IS the view
+
+== [10] defaultExpand — a new group opens at level 1 without a click ==
+▾ 2 calls · 🔎×1 📂×1 · 30ms
+└ ✓ grep [find leftovers] TODO · 2 lines · 20ms
+└ ✓ ls [list the sources] src · 3 lines · 10ms
+  ← ▾ header + one row per call, straight away
+
+== [11] Iconized summary — known tools get icons, MCP shares one, unknowns fall back ==
+▸ 4 calls · 🔌×1 🤖×1 🌐×1 🔀×1 · 2.5s
+  ← icons come from the icon table (mcp prefix → 🔌, unknown → 🤖)
+
+== [12] Bilingual word tables — the same summary in zh and en ==
+  zh: (Chinese vocabulary — omitted here to keep this file ASCII; run the script to see it)
+  en: ▸ 2 calls · ⚡×1 📖×1 · 840ms
+  ← same data, two vocabularies; /lang switches live
+
+Every line above came from the real formatters and state machine in src/.
+```
+
+</details>
 
 ## Roadmap
 

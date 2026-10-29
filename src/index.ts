@@ -1,7 +1,7 @@
 /**
  * pi-helm — mission control for your Pi session.
  *
- * v0.2: group folding (自研官方案, zero prototype patches).
+ * v0.2: group folding (own implementation, zero prototype patches).
  *   - Layer 1  src/groups.ts     pure state machine (no pi import, unit-tested)
  *   - Layer 2  src/renderers.ts  resolver-chain glue + self-shell GroupLine
  *   - Layer 3  this file         event wiring, conflict ladder, mission panel

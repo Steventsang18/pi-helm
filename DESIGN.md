@@ -1,76 +1,76 @@
-# DESIGN — pi-helm 设计意图
+# DESIGN — the intent behind pi-helm
 
-> 目的：把架构决策、契约与权衡写死在仓库里，任何贡献者都能凭此接手。
-> 事实基线见 README；本文件只讲 **为什么**。冲突时以代码 + README 为准。
+> Purpose: pin the architecture decisions, contracts and trade-offs in the repository so any contributor can take over.
+> The factual baseline is the README; this file explains **why**. When they disagree, the code and README win.
 
-## 1. 三层架构分工
+## 1. Three-layer split
 
 ```
-Layer 1  src/groups.ts     纯状态机
-         src/strings.ts    中英文词表（纯数据 + setLang）
-         src/styles.ts     显示风格 + DIY 合并 + 图标解析（纯数据）
-         src/width.ts      显示宽度工具（emoji/CJK 双宽；被 renderers 与 styles 共用）
-Layer 2  src/renderers.ts  渲染胶水
-Layer 3  src/index.ts      接线（事件/降级/面板）
-         index.ts          入口 shim（re-export src/index.ts）
+Layer 1  src/groups.ts     pure state machine
+         src/strings.ts    zh/en word tables (pure data + setLang)
+         src/styles.ts     display style + DIY merge + icon resolution (pure data)
+         src/width.ts      display-width helpers (emoji/CJK are double width; shared)
+Layer 2  src/renderers.ts  render glue
+Layer 3  src/index.ts      wiring (events / degrade ladder / panel)
+         index.ts          entry shim (re-exports src/index.ts)
 ```
 
-| 层 | 职责 | 禁止事项 | 测试策略 |
+| Layer | Responsibility | Forbidden | Testing |
 |---|---|---|---|
-| L1 `groups.ts` | boundary/carrier/plain 分类、分组注册表、摘要构建、viewPlan、`rebuildFromEntries` | 零 pi import、零主题、零副作用、零模块全局（实例化 registry，避免多会话/reload 竞态） | `node --test` 直测 |
-| L1 `strings.ts` | 摘要/行尾用词（call/failed/running/lines/done）+ 工具描述目录 | 零 pi import；只放界面用词，不放业务逻辑 | `setLang` 后直测断言 |
-| L1 `styles.ts` | 内置字形/图标/分隔符；settings `style` 覆盖的深合并；`iconFor` 解析（精确 → `mcp` 前缀 → `*` 兜底）；面板边框 dash 宽度 | 零 pi import；不放颜色（颜色是 theme token 的事） | merge/覆盖/图标/边框规则直测 |
-| L1 `width.ts` | 显示宽度工具（`stringWidth`/`clipToWidth`/`cellWidth`）：emoji/CJK 双宽、VS16 提宽、ZWJ 合字、零宽记号 | 零 pi import；被 renderers 与 styles 共用（所以必须独立成模块，否则两者循环依赖） | 宽度断言直测 |
-| L2 `renderers.ts` | 纯行格式化（`fmtSummaryLine`/`fmtRow`/`fmtPinned`）、自壳 `GroupLine`、`registerToolRenderer` 解析器链、per-call 计时器、显示宽度裁剪 | 结构性代码才能被直测——不 import pi 运行时 | 导入本文件直接测 |
-| L3 `index.ts` | 事件 → registry、会话恢复重建、冲突降级梯、任务状态、面板、药丸卡、i18n、`/helm` | 不放可单测的业务逻辑 | 手动/集成 |
+| L1 `groups.ts` | boundary/carrier/plain classification, the group registry, summary building, `viewPlan`, `rebuildFromEntries` | no pi import, no theme, no side effects, no module globals (instantiate the registry — avoids multi-session/reload races) | `node --test` directly |
+| L1 `strings.ts` | summary/row vocabulary (call/failed/running/lines/done) + the tool description catalog | no pi import; interface words only, no business logic | assert after `setLang` |
+| L1 `styles.ts` | built-in glyphs/icons/separator; deep merge of the `style` settings; `iconFor` resolution (exact → `mcp` prefix → `*` fallback); panel rule widths | no pi import; no colors (colors belong to theme tokens) | merge/override/icon/rule tests |
+| L1 `width.ts` | display-width helpers (`stringWidth`/`clipToWidth`/`cellWidth`): emoji/CJK double width, VS16 widening, ZWJ clusters, zero-width marks | no pi import; shared by renderers and styles (hence its own module — importing across would create a cycle) | width assertions |
+| L2 `renderers.ts` | line formatting (`fmtSummaryLine`/`fmtRow`/`fmtPinned`), the self-shell `GroupLine`, the `registerToolRenderer` resolver chain, per-call timers, cell-aware clipping | only structural code can be tested directly — never import the pi runtime | import this module and test |
+| L3 `index.ts` | events → registry, session-restore rebuild, conflict ladder, task state, overlay, pills, i18n, `/helm` | no testable business logic | manual / integration |
 
-**为什么这样切**：折叠语义（最容易改错的部分）必须能在没有 pi 环境的单测里跑；渲染与接线各只依赖下面一层，方向单向向下，无环。
+**Why this split:** the folding semantics (the part most likely to break) must run in unit tests without a pi environment; rendering and wiring each depend only on the layer below, one direction, no cycles.
 
-**官方红线**（不许违反）：扩展工厂里不启动任何资源；计时器在 `session_start`/渲染时创建、`session_shutdown` 清理；行为层在 JSON/RPC 无头模式照常可用；颜色全走语义主题 token。
+**Official red lines** (never violate): start no resources in the extension factory; create timers in `session_start` or at render time and clear them in `session_shutdown`; keep behavior (pills, counters) working headless in JSON/RPC modes; take every color from a semantic theme token.
 
-## 2. No-Fight 契约 8 条（详见 README 表格）
+## 2. The 8 No-Fight contracts (see the README table)
 
-1. **零原型补丁** — 只用 `registerToolRenderer`/`registerTool`/事件/`ctx.ui`；patch 原型是扩展互殴崩溃的根源。
-2. **渲染走解析器链** — `(name, next) => …`，不该自绘就 `return next()`；load order 只决定风格，绝不崩。
-3. **工具所有权降级梯** — reasoning 头需要工具定义；`registerTool` 硬失败 → 降级纯渲染模式（行与折叠保留，reasoning 头去掉）+ notify 一次。
-4. **命名空间隔离** — 所有 UI key `pi-helm:` 前缀（`setStatus`、药丸 `customType`）；v2 遗留 `mission-pill` 仍要能渲染。
-5. **热键可配置** — 默认 `⌃Q`（裸 ctrl 字节，全终端可用）；`/mission` 是永远的逃生门。
-6. **working message 礼仪** — 仅 phase 变化才 `setWorkingMessage`；`turn_end` 恢复默认。
-7. **生命周期幂等** — 工厂零资源；handler 幂等；可重复 reload。
-8. **一键退出** — `/helm off|on|toggle` + `"enabled": false`。
+1. **Zero prototype patches** — only `registerToolRenderer`/`registerTool`/events/`ctx.ui`; patching prototypes is the root cause of extension-vs-extension crashes.
+2. **Rendering goes through the resolver chain** — `(name, next) => …`; `return next()` when we do not draw. Load order decides style, never a crash.
+3. **Tool-ownership degrade ladder** — the reasoning head needs the tool definition; a hard `registerTool` failure degrades to render-only mode (rows and folding stay, the reasoning head goes) plus one notification.
+4. **Namespace isolation** — every UI key carries the `pi-helm:` prefix (`setStatus`, the pill `customType`); the v2 legacy `mission-pill` must still render.
+5. **Configurable hotkey** — default `⌃Q` (a bare ctrl byte, works in every terminal); `/mission` is the permanent escape hatch.
+6. **Working-message etiquette** — `setWorkingMessage` only on a phase change; restore the default at `turn_end`.
+7. **Idempotent lifecycle** — the factory starts nothing; handlers are idempotent; reload can repeat.
+8. **One-key exit** — `/helm off|on|toggle` plus `"enabled": false`.
 
-**契约的地位**：这 8 条是与其他扩展共处的硬约束。任何新功能若与某条冲突，先改设计，不许绕过契约。
+**Status of these contracts:** they are hard constraints for coexisting with other extensions. If a new feature collides with one, change the design — do not route around a contract.
 
-## 3. 面板 / 分组折叠的权衡
+## 3. Panel / folding trade-offs
 
-- **折什么**：只折两段 assistant 正文之间的工具调用。`carrier`（纯思考+调工具）并入当前组；`boundary`（带正文）切组且正文永远照常渲染——**折叠只藏工具噪音，不藏正文**，这是与"全屏重排"类方案的根本区别。
-- **防闪**：跑不到 1s 的调用不现身（`RUNNING_ROW_DELAY_MS`），否则工具行闪一下就消失比不折还吵。
-- **失败粘摘要**：`N failed` 红字贴在摘要行，不吊一排红行；错误永不被静默折叠。
-- **edit/write 永不折叠**且切断组：diff 是重点，其后的调用另开新组（宁可多折一行，不让 diff 淹没）。
-- **reason-first**：行首放 `reasoning` 短语（引导性可选字段，执行前剥离，不改模型行为）——摘要回答“干了什么”，reason 回答“为什么干”。模型没传时由 `strings.ts` 描述目录兜底（`[运行命令]`），**确定性生成，零 LLM 调用是产品红线**；两者不同时出现（reason 优先）。
-- **三级展开**：level 0 摘要行 → level 1 行列表 → level 2 单行完整输出；`Ctrl+O` 整体切换。折叠是纯视图状态，会话恢复时从 `sessionManager.getBranch()` 重建。
-- **单调用不折（`autoRow`，A 方案）**：单成员组没有值得摘要的东西，`▸ 1 call · bash×1` 信息量反而低于它藏起来的那行——直接渲染行（无 header、无 `└` gutter，因为它上方没有可连的摘要）；组变回多成员时照旧折摘要。防闪对它不适用：行就是视图本身，不存在“冒出来又缩回去”。`"autoRow": false` 可关。
-  - **但显式折叠-all 必须能折到它**（代码审查 2026-10-28 发现的缺陷）：`Ctrl+O` 折叠-all 对单成员组无效——`solo` 分支无视 level。修法：`Group.soloFolded` 标记“level 0 是用户折的”——新单成员组天生 level 0（`openGroup` 种子），naive 的“solo 尊重 level”会把它们全部默认折起，等于静默杀掉 autoRow。只有 `noteSetExpanded(collapse)` 置位，展开时清除；fresh（未折过）不受影响。
-  - **结构不变量**（复核确认，这也是 soloFolded 方案成立的根）：`solo=true` → viewPlan 走 solo 分支 → `header` 必为 null → fresh solo 组无头部可点 → **`toggleHeader` 对 fresh solo 组结构上不可达**。因此「单成员 + soloFolded=false + level 1 + 有 header」这个 naive 触发态不可能存在；toggleHeader 只可能作用于有 header 的单成员组，而那必然已 `soloFolded=true`——不存在第 3 条漏置/漏清路径。
-- **默认展开（`defaultExpand`，设计决策）**：新分组默认 level 0（折叠）是“省地”取向；要“开门见明细”的用户开此开关——新分组直接 level 1（`▾` 头 + 每成员一行）。只影响新建组（`openGroup` 处生效），已建组的 level 不被运行中配置翻转波及；会话恢复重建时也按当前配置展开。与 `autoRow` 正交：单调用组仍优先直出行。
-- **摘要行图标化（C 方案）**：`▸ 5 calls · ⚡×3 📖×2`——图标让工具类型一眼可扫；未知工具（MCP 等）保留名字不硬套图标。只改呈现，不加行数。
-- **面板（/mission）是 overlay 不是替换**：Esc 秒关、不打断正在跑的回合；药丸卡经 `appendEntry` 注入，不进 LLM 上下文。
-- **单一内置风格 + DIY 接口**：不搞多主题预设（维护成本高、伪命题——终端里没有真的“Google 风格”）；内置一套经典字形，`settings.style` 逐项覆盖（`marker`/`openMarker`/`rowGutter`/`sep`/`icons`/`spinner`），空值/未知键不生效（手滑不黒屏）。颜色不开放——theme token 是深浅主题自适应和契约 #1 的前提。
-- **运行中 spinner（帧从时钟推导）**：braille `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`（10 帧、全单宽、tmux/SSH 安全），180ms 一帧（≈5.6fps，柔和）。帧号 = `frames[floor(now/180) % len]`——**不新增状态**，同一瞬多个调用点算出同一帧，测试可钉 `now`。应用 4 处：行首 glyph、摘要行 running 段、面板任务标题/任务行。面板当前步骤的 `▶` **不改**——那是指位置，不是指活动。ticker 与帧率同源：per-call 计时器改 180ms（原 1s 会像卡住），面板定时器 180ms 但空闲直接返回不重绘；面板缓存键必须含当前帧，否则缓存会吞掉动画。防闪 `RUNNING_ROW_DELAY_MS` 与 reveal 定时器**未动**。
-- **显示宽度裁剪**：emoji/CJK 是双宽；按 UTF-16 码元数裁剪（旧代码）会把行裁歪/裁半个 emoji。`stringWidth`/`clipLine` 按显示格宽计（含 VS16 提宽、ZWJ 合字、零宽记号），零 pi 依赖。
-- **edit/write 滚动框（2026-10-28）**：长 diff 固定视口（`pinnedBodyHeight`，默认 14）+ 头部总行数 + wheel 自滚。**否决了官方 ScrollView**（初始方案）：① `routeWheel` 只在 layout 树找 `box.scrollView`，而 layout 树只对实现 `[LAYOUT_NODE]` 的组件下钻，transcript 的 `documentContainer` 是 plain Container → 嵌套 ScrollView 永远不在 wheel 搜索集；② ScrollView 的 `render()` 返回全部行，视口裁剪在 `layoutComponent` 的 scroll 节点分支——不进 layout 树就没有固定高度；③ 要生效必须让 LAYOUT_NODE 贯穿 pi 的容器链 = prototype patch = 违反契约 #1。**替代实现**：wheel 事件经 `parseWheelEvent → dispatchMouseToLayout → Container.handleMouse 逐层委托`到达我们的 GroupLine（源码验证），自管 scrollTop；**contain 语义**——到边界仍消费事件（`render:false`），transcript 绝不跟着跳；短内容返回 `undefined` 放行给全局滚动。若未来 pi 让工具卡参与 layout，可迁回 ScrollView。
+- **What folds:** only the tool calls between two pieces of assistant text. A `carrier` (thinking + calls, no text) joins the current group; a `boundary` (visible text) splits the group and always renders — **folding hides tool noise, never prose**. That is the fundamental difference from "rearrange the whole screen" approaches.
+- **Anti-flicker:** a call running under 1s never surfaces (`RUNNING_ROW_DELAY_MS`); a row that pops in and folds back a frame later is louder than no folding at all.
+- **Failures stick to the summary:** `N failed` in red on the summary line instead of a column of red rows; an error is never silently folded away.
+- **edit/write never fold** and cut the group: the diff is the point, and calls after one start a fresh group (better one extra folded line than a buried diff).
+- **Reason-first:** each row leads with a `reasoning` phrase (a guided, optional schema field stripped before execution — no model-behavior change): the summary answers "what ran", the reason answers "why". When the model sends none, the `strings.ts` catalog fills in (`[run command]`), **generated deterministically — zero LLM calls is a product red line**; the two never appear together (reason wins).
+- **Three levels:** level 0 summary row → level 1 row list → level 2 one call's full output; `Ctrl+O` toggles the whole group. Folding is pure view state, rebuilt from `sessionManager.getBranch()` on restore.
+- **Single calls do not fold (`autoRow`):** a one-member group has nothing worth summarizing — `▸ 1 call · bash×1` carries less information than the row it hides, so the row renders directly (no header, no `└` gutter, because there is no summary above to connect to); as soon as the group has more members it folds again. The anti-flicker delay does not apply: the row *is* the view, so it cannot "pop in and retract". Disable with `"autoRow": false`.
+  - **But an explicit collapse-all must still reach it** (defect found in code review 2026-10-28): `Ctrl+O` collapse-all did nothing to a one-member group — the `solo` branch ignored `level`. Fix: `Group.soloFolded` marks "level 0 because the user folded it" — a fresh one-member group is level 0 by construction (`openGroup` seed), so the naive "solo respects level" would fold them all by default and silently kill `autoRow`. Only `noteSetExpanded(collapse)` sets it; expanding clears it; fresh groups are untouched.
+  - **Structural invariant** (confirmed in review; this is what makes the soloFolded design sound): `solo=true` → viewPlan takes the solo branch → `header` is always null → a fresh solo group has no header to click → **`toggleHeader` is structurally unreachable for a fresh solo group**. Therefore the naive trigger state ("one member + soloFolded=false + level 1 + has header") cannot exist, and toggleHeader can only ever hit a one-member group that already has `soloFolded=true` — there is no third path that could set or clear the flag wrongly.
+- **Open by default (`defaultExpand`, design decision):** opening new groups at level 0 (folded) optimizes for space; users who want detail up front enable this switch — new groups start at level 1 (`▾` header + one row per member). It only affects newly created groups (applied in `openGroup`); a level already set on an existing group is never rewritten by a live config change, and a session-restore rebuild follows the current setting. Orthogonal to `autoRow`: one-member groups still prefer the direct row.
+- **Iconized summary:** `▸ 5 calls · ⚡×3 📖×2` — icons let you scan tool types at a glance. Only the presentation changes; no extra lines.
+- **The panel (`/mission`) is an overlay, not a replacement:** Esc closes it instantly and it never interrupts a running turn; pills are injected via `appendEntry` and never enter the LLM context.
+- **One built-in style plus a DIY interface:** no theme presets (high maintenance, and a false promise — there is no real "Google style" in a terminal). One classic glyph set ships built in, and `settings.style` overrides it item by item (`marker`/`openMarker`/`rowGutter`/`sep`/`icons`/`spinner`); empty or unknown values are ignored (a typo must not blank the UI). Colors stay closed — theme tokens are what make dark/light adaptation and contract #1 work.
+- **Running spinner (frame derived from the clock):** braille `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` (10 frames, all single width, tmux/SSH safe), 180 ms per frame (≈5.6 fps, soft). Frame index = `frames[floor(now/180) % len]` — **no new state**, every call site at the same instant computes the same frame, and tests can pin `now`. Applied in four places: the row glyph, the summary's running segment, and the panel's task header and task rows. The panel's current-step `▶` is **left alone** — it marks position, not activity. Ticker rate follows the frame rate: the per-call timer runs at 180 ms (1 s looked frozen), the panel timer runs at 180 ms but returns early when idle so nothing repaints; the panel cache key must include the current frame, otherwise the cache swallows the animation. The anti-flicker `RUNNING_ROW_DELAY_MS` and the reveal timers are **untouched**.
+- **Display-width clipping:** emoji and CJK occupy two cells; clipping by UTF-16 units (the old code) cuts rows short or splits an emoji. `stringWidth`/`clipLine` count display cells (including VS16 widening, ZWJ clusters and zero-width marks), with no pi dependency.
+- **edit/write scroll box (2026-10-28):** long diffs get a fixed viewport (`pinnedBodyHeight`, default 14), a total line count in the header, and wheel scrolling. **The official ScrollView was rejected** (the initial plan): ① `routeWheel` only searches the layout tree for `box.scrollView`, and the layout tree only descends into components implementing `[LAYOUT_NODE]` — the transcript's `documentContainer` is a plain Container, so a nested ScrollView never enters the wheel search set; ② a ScrollView's `render()` returns all lines and viewport clipping happens in `layoutComponent`'s scroll branch — outside the layout tree there is no fixed height; ③ making it work would require threading LAYOUT_NODE through pi's container chain = a prototype patch = violating contract #1. **Implementation instead:** the wheel event reaches our GroupLine through the chain pi already provides (`parseWheelEvent → dispatchMouseToLayout → Container.handleMouse` delegation, verified in source) and we manage `scrollTop` ourselves; **contain semantics** — at the boundary the event is still consumed (`render:false`) so the transcript never jumps under the cursor, while short content returns `undefined` and lets global scrolling proceed. If pi ever puts tool cards into the layout tree, this can migrate back to ScrollView.
 
-## 4. 出处（Provenance）
+## 4. Provenance
 
-- 折叠语义吸收自 pi-tidy（MIT, Andy8647/pi-tidy）：boundary/carrier 分类、1s 防闪、失败计数贴摘要、edit/write 不折。
-- **我们改了什么**：pi-tidy 的模块全局改为实例化 registry（多会话/reload 竞态）；reason-first 行、执行时钟、药丸卡、面板为自研。
-- **为什么更好**：零原型补丁 + 解析器链让 pi-helm 与其它渲染扩展共存（pi-tidy 是独立实现，风格冲突时只能二选一）；分层后折叠语义可直测。
-- 计划解析 `Plan:`/`[DONE:n]` 与官方 plan-mode 示例同款方案。
+- Grouping semantics absorbed from pi-tidy (MIT, Andy8647/pi-tidy): boundary/carrier classification, the 1 s anti-flicker delay, the failure count on the summary, edit/write never folding.
+- **What we changed:** pi-tidy's module globals became an instantiated registry (multi-session/reload races); the reason-first rows, execution clock, pills and panel are our own.
+- **Why it is better:** zero prototype patches plus a resolver chain let pi-helm coexist with other rendering extensions (pi-tidy is an independent implementation — on a style clash you can only run one); after the split, the folding semantics are directly testable.
+- Plan parsing (`Plan:` / `[DONE:n]`) follows the official plan-mode example.
 
-## 5. 未决 / 边界
+## 5. Open questions / boundaries
 
-- 上游对比：repo 尚无 git remote，“最新”只对本地 HEAD 成立。
-- 已知冲突矩阵（pi-tidy、工具定义所有者、`alt+…` 热键）见 README。
-- **pi 运行时契约（2026-10-28 钤死）**：`renderResult(result, options, theme, context)` 的 `options` 只有 `{expanded, isPartial}`；`durationMs`/`isError` 在 `context` 上（`tool-execution.js` getRenderContext）。读错对象 = 3a 那类“数据尾巴丢失”；改这里前先对照 pi 源码 `dist/core/extensions/types.d.ts` 的 `ToolRenderResultOptions`/`ToolRenderContext`。
-- **pi 1.3.0 settings 陷阱（2026-10-28 实锤，曾致全部配置静默失效）**：`pi.getSettings()` 在扩展**工厂期必抛** `Extension runtime not initialized`（`runtime.getSettings` 在 `runner.bindCore()` 才接真实现，晚于所有 factory）。工厂里 try/catch 吞掉 → 所有 settings 静默跑默认值。正确姿势：**工厂期读盘**（`join(getAgentDir(), "settings.json")` 直读全局配置）+ **`session_start` 用官方 API 重读**（此时 runtime 已活，project 覆盖合并进来）。代价：注册期才生效的键（`hotkey`、`enabled`→reasoning 注入）只认全局盘读，project settings 里的这两个不生效——已文档化。教训：**catch 静默吞异常是温床，吞的时候必须留下可见痕迹**。
-- pi 对扩展只暴露 `getSettings()`（读），无官方写接口——`/lang` 目前只改会话内存，重启失效；持久化需用户自己在 settings.json 写 `"lang"`（已文档化）。不自作主张写用户 settings 文件。
+- Upstream comparison: the repository has no git remote yet, so "latest" only means local HEAD.
+- The known-conflict matrix (pi-tidy, tool-definition owners, `alt+…` hotkeys) lives in the README.
+- **pi runtime contract (pinned 2026-10-28):** `renderResult(result, options, theme, context)` — `options` is only `{expanded, isPartial}`; `durationMs` and `isError` live on `context` (`tool-execution.js`, getRenderContext). Reading the wrong object is exactly the "missing tail" class of bug; before changing anything here, check `ToolRenderResultOptions`/`ToolRenderContext` in pi's `dist/core/extensions/types.d.ts`.
+- **pi 1.3.0 settings trap (confirmed 2026-10-28; once made every setting silently inert):** `pi.getSettings()` **always throws** during extension loading (`Extension runtime not initialized`) — `runtime.getSettings` is only wired in `runner.bindCore()`, after every factory has run. A try/catch in the factory swallows it, so every setting silently runs on its default. The correct approach: **read the file in the factory** (`join(getAgentDir(), "settings.json")` for the global config) plus **re-read through the official API on `session_start`**, when the runtime is live and project overrides merge in. The cost: keys that must be known at registration time (`hotkey`, `enabled` → reasoning injection) only honor the global file — project-level values for those two are ignored, documented in the README. Lesson: **a silent catch block is the perfect incubator for this class of bug — if you swallow an error, leave a visible trace.**
+- pi exposes only `getSettings()` (read) to extensions, with no official write path — so `/lang` currently changes session memory only and resets on restart; persisting it means writing `"lang"` into `settings.json` yourself (documented). We do not write a user's settings file on our own.

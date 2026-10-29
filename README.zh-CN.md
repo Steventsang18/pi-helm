@@ -1,8 +1,8 @@
 # pi-helm ⛵
 
-**你 Pi 会话的指挥台。** 让终端里的 AI 会话一眼看清进度与要点——为长时间开发、多任务并行、以及被终端劝退的所有人设计。
+**你 Pi 会话的指挥台。** 让长时间终端会话保持可读：工具噪音折成每段回复一行摘要，每行先说“为什么干”，任务状态（计划进度、运行中任务、要点）一个按键就到手。
 
-> 终端会话总是很吵：工具调用、代码删减、思考内容、子任务。pi-helm 把工具噪音折成每个回复段一行摘要，行内保留 reason-first 的“为什么”，并把任务状态——计划进度、运行中的任务、要点——放在一个按键之内。
+> 终端会话总是很吵：工具调用、代码差异、思考内容、子任务。pi-helm 把工具噪音折成每段回复一行摘要，行内保留 reason-first 的“为什么”，并把任务状态收在一个按键之内。
 
 *English version: [README.md](README.md)*
 
@@ -12,35 +12,47 @@
 
 | | 特性 | 作用 |
 |---|---|---|
-| ⛵ | **指挥台面板** | `⌃Q`（或 `/mission`）呼出全屏仪表盘：计划进度条 · 运行中任务（耗时实时跳动）· 要点流。Esc 秒关，绝不打断正在跑的回合。 |
-| 🗂 | **分组折叠** | 两段 assistant 正文之间的全部工具调用折成一行摘要——`▸ 5 calls · bash×3 read×2 · 1 failed · 1.2s`。点一下展开行列表（`│` 竖线），再点某行看完整输出。跑不到 1s 的调用绝不闪现；失败以 `N failed` 红字粘在摘要上；edit/write 永不折叠（diff 才是重点）。 |
-| 📖 | **Reason-first 行** | 每行开头是**为什么干**——模型被引导传入的 `reasoning` 短语：`│ ✗ bash [确认哪个断言挂了] pnpm test · exit 1 · 1.8s`。 |
-| ⏱ | **执行实时时钟** | 工具运行时卡片显示 `▶ 运行中 3s`，秒数在待处理底色上实时跳动；结束后落成 `✓ done 2.3s`（绿底）或 `✗ error`（红底）。错误永远不被静默折叠。 |
-| 📊 | **计划进度** | 解析 agent 输出中的 `Plan:` 编号步骤和 `[DONE:n]` 标记（与官方 plan-mode 示例同款方案）。进度条同时出现在面板和 footer。 |
-| 🔑 | **要点流** | 工具错误和里程碑被确定性捕获，盖成药丸卡嵌入对话流（通过 `appendEntry`，不进 LLM 上下文）。每回合的文件改动自动汇总成 `本轮改动：N 文件 · +a/−b`。 |
-| 🎚 | **流式阶段指示器** | assistant 流式输出时，footer 在 `✻ 思考中…` 和 `✍ 撰写回复…` 之间实时切换。 |
-| 🌐 | **国际化** | 界面文案中英文随时 `/lang zh|en` 切换；提示词侧保持英文。 |
+| ⛵ | **指挥台面板** | `⌃Q`（或 `/mission`）呼出仪表盘：计划进度条 · 运行中任务（耗时实时跳动）· 要点流。Esc 秒关，绝不打断正在跑的回合。 |
+| 🗂 | **分组折叠** | 两段 assistant 正文之间的全部工具调用折成一行摘要——`▸ 5 次调用 · ⚡×3 📖×2 · ✗ 1 次失败 · 1.2s`。点摘要展开行列表（`│` 竖线），点某行看完整输出。跑不到 1s 的调用绝不闪现；失败以 `✗ N 次失败` 粘在摘要上；`edit`/`write` 永不折叠（diff 才是重点）。 |
+| 📖 | **Reason-first 行** | 每行开头是**为什么干**——模型被引导传入的 `reasoning` 短语：`│ ✗ bash [确认哪个断言挂了] pnpm test · exit 1 · 1.8s`。模型没传时，内置中英双语工具描述目录兜底。 |
+| ⏱ | **执行实时时钟** | 工具运行时卡片显示盲文 spinner 加实时跳动的耗时；结束后落成 `✓ 完成 2.3s`（绿）或 `✗ 出错`（红）。错误永不被静默折叠。 |
+| 📊 | **计划进度** | 解析 agent 输出里的 `Plan:` 编号步骤与 `[DONE:n]` 标记（与官方 plan-mode 示例同款方案）。进度条同时出现在面板和状态行。 |
+| 🔑 | **要点流** | 工具错误和里程碑被确定性捕获，盖成药丸卡嵌入对话流（经 `appendEntry`，不进 LLM 上下文）。每回合的文件改动自动汇总成 `本轮改动：N 文件 · +a/−b`。 |
+| 🎚 | **流式阶段指示器** | assistant 流式输出时，状态行在 `✻ 思考中…` 与 `✍ 撰写回复…` 之间实时切换。 |
+| 🌐 | **国际化** | 界面文案中文/英文随时用 `/lang zh\|en` 切换。提示词侧保持英文。 |
 
 除 Pi 自带包外零运行时依赖。纯渲染改造：不改 Pi 本体、不发 LLM 调用、不改模型行为（`reasoning` 是引导性可选 schema 字段，执行前会被剥离）。
 
 ## 安装
 
+需要 pi 1.3.0 或更新版本。
+
 ```bash
-# 从源码安装（当前）
-pi install ./pi-helm
+pi install /path/to/pi-helm
+```
 
-# 或单次试用
-pi -e ./pi-helm/index.ts
+该命令把本包注册进 `~/.pi/agent/settings.json`。装完**必须重启 pi**——`/reload` 换不掉已加载的 ESM 模块。
 
-# 或拷进项目后 /reload
-cp index.ts <repo>/.pi/extensions/mission-demo.ts
+### 怎么确认装好了
+
+1. 重启 pi。
+2. 让它做点会调用工具的事（例如“跑一下测试”）。
+3. 应该看到工具调用被折成一行摘要，开头是 `▸`，例如 `▸ 2 次调用 · ⚡×1 📖×1 · 1.1s`。
+
+如果看到的是 pi 原生的工具框，说明扩展没加载——试试 `/mission`（能弹出面板即意味着已加载），并查看 pi 启动时有无扩展报错。
+
+### 备选方式
+
+```bash
+pi -e /path/to/pi-helm/index.ts                      # 单次试用，不安装
+cp -r src index.ts ~/.pi/agent/extensions/pi-helm/   # 手动复制，然后重启 pi
 ```
 
 ## 使用
 
 | 按键 / 命令 | 作用 |
 |---|---|
-| `⌃Q` · `⌥G`* · `/mission` | 打开 / 关闭面板（*`⌥G` 需终端开启 Option-as-meta） |
+| `⌃Q` · `⌥G`* · `/mission` | 打开 / 关闭面板（*`⌥G` 需要终端开启 Option-as-meta） |
 | `/lang zh` · `/lang en` | 切换界面语言 |
 | `/milestone <text>` | 记录一个里程碑药丸卡（不发送给 LLM） |
 | `/demo-seed` | 注入假任务，立即预览全貌 |
@@ -58,29 +70,31 @@ Plan:
 
 并用 `[DONE:n]` 标记完成的步骤。
 
-## 分组折叠（Group folding）
+## 分组折叠
 
 三级展开，一次点一下：
 
 ```
- ▸ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s             ← level 0：折成一行（图标化）
- ▾ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s             ← level 1：点摘要行
+ ▸ 5 次调用 · ⚡×3 📖×2 · ✗ 1 次失败 · 1.2s           ← level 0：折成一行
+ ▾ 5 次调用 · ⚡×3 📖×2 · ✗ 1 次失败 · 1.2s           ← level 1：点摘要行
  │ ✓ bash [确认哪个断言挂了] pnpm test · exit 1 · 1.8s
- │ ✓ read src/app.ts · 120 lines · 0.0s
- │ ✗ bash [验证修复] pnpm test · exit 1 · 1.2s         ← level 2：点某行
+ │ ✓ read src/app.ts · 120 行 · 0.0s
+ │ ✗ bash [验证修复] pnpm test · exit 1 · 1.2s        ← level 2：点某行
  │   …完整输出 / diff…
 
- └ ✓ bash [运行命令] pnpm test · exit 1 · 1.8s         ← 只有 1 个调用：不折，直接出行
+ └ ✓ bash [运行命令] pnpm test · exit 1 · 1.8s        ← 只有 1 个调用：不折，直接出行
 ```
 
-- **单调用不折（`autoRow`）**：组里只有 1 个调用时没有值得摘要的东西——`▸ 1 call · bash×1` 反而藏了“干了啥”，直接显示那行；多调用照旧折摘要。
+- **单调用不折（`autoRow`）**：组里只有 1 个调用时没有值得摘要的东西——`▸ 1 次调用 · bash×1` 反而藏了“干了啥”，直接显示那行；多调用照旧折摘要。
 - **折什么**：两段 assistant 正文之间的全部工具调用。只思考+调工具的步骤不切组（carrier）；带正文的消息切组（boundary）且正文永远照常渲染——折叠只藏工具噪音，不藏任何正文。
-- **防闪**：折叠组里跑不到 1s 的调用不现身（单调用组的行是实时的，它就是视图本身）；失败数粘在摘要行（`✗ 1 failed` 红字），不在折叠组下吊一排红行。
-- **永不折叠**：`edit` / `write`——diff 才是重点，行尾带 `+12/−3` 差异统计与 `↑↓` 用量；它们同时切断组：其后的调用另开新组。
+- **防闪**：折叠组里跑不到 1s 的调用不现身（单调用组的行从第一帧就是实时的，它就是视图本身）；失败数粘在摘要行，不在折叠组下吊一排红行。
+- **永不折叠**：`edit` / `write`——diff 才是重点，行尾带 `+12/−3` 差异统计与 `↑↓` 用量，正文在固定视口内滚动。它们同时切断组：其后的调用另开新组。
 - **`Ctrl+O`** 照旧整体展开 / 收回摘要；点完整框只收起那一个。
-- **恢复安全**：会话恢复时从 `sessionManager.getBranch()` 重建分组，reload 后折叠依旧成立。
+- **恢复安全**：会话恢复时从保存的分支重建分组，重启后折叠依旧成立。
 
-配置（`~/.pi/agent/settings.json`，**重启 pi 生效**——`/reload` 换不掉已加载的 ESM）：
+## 配置
+
+`~/.pi/agent/settings.json`，改完**必须重启 pi**（`/reload` 换不掉已加载的 ESM）：
 
 ```json
 {
@@ -106,25 +120,25 @@ Plan:
 | `workingMessage` | `true` | 工作行的流式阶段文案（`✻ 思考中…` / `✍ 撰写回复…`） |
 | `fold` | `true` | 分组折叠本身 |
 | `neverFold` | `[]` | 保持原生渲染、不折叠的工具名 |
-| `autoRow` | `true` | 单调用组不再折成 `▸ 1 call`，直接显示那行（`└ ✓ bash …`） |
+| `autoRow` | `true` | 单调用组不再折成 `▸ 1 次调用`，直接显示那行（`└ ✓ bash …`） |
 | `defaultExpand` | `false` | 新分组默认展开（`▾` 头 + 每成员一行明细）；默认仍是折叠，点头部才展开 |
-| `pinnedBodyHeight` | `14` | edit/write 卡片的滚动视口高度（4–40）；短内容不滚动，超过才滚 |
+| `pinnedBodyHeight` | `14` | `edit`/`write` 滚动框的视口高度（4–40）；短正文保持自然高度，只有长正文才滚动 |
 | `lang` | `"zh"` | 界面语言默认值；会话内用 `/lang zh\|en` 切换 |
-| `style` | `{}` | DIY 显示层：`marker`/`openMarker`/`rowGutter`/`sep`/`icons`/`spinner` 逐项覆盖内置风格，未知/空值不生效；颜色仍走 pi 语义 token（深浅主题自适应）。`spinner` 是帧数组（默认 braille `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`，每帧必须单宽，180ms 一帧）。`icons` 另有 `mcp`（前缀匹配所有 `mcp__*`）与 `"*"`（兜底，默认 🤖）两个特殊键；图标必须 2 显示格宽（否则摘要行与面板边框会歪） |
+| `style` | `{}` | DIY 显示层：`marker` / `openMarker` / `rowGutter` / `sep` / `icons` / `spinner` 逐项覆盖内置风格，未知或空值不生效；颜色仍走 pi 语义 token，深浅主题都正常。`spinner` 是帧数组（默认盲文 `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`，每帧必须单宽，180ms 一帧）。`icons` 有两个特殊键：`mcp`（前缀匹配所有 `mcp__*`）与 `"*"`（兜底，默认 🤖）。图标必须 2 显示格宽，否则摘要行与面板边框会歪 |
 
-> **限制**：`hotkey` 与 `enabled`（reasoning 注入）是**注册期**配置，只认全局 `settings.json`（pi 1.3.0 在扩展加载期不给 `getSettings()`，只能直读全局文件）；project settings 里的这两项不生效。其余键（折叠/风格/语言/defaultExpand 等）在 `session_start` 官方重读，project 覆盖正常合并。
+> **限制**：`hotkey` 与 `enabled`（reasoning 注入）是**注册期**配置，只认**全局** `settings.json`——pi 1.3.0 在扩展加载期不提供 `getSettings()`，本扩展只能直读全局文件。project settings 里覆盖这两项无效。其余键在 `session_start` 经官方 API 重读，project 覆盖正常合并。
 >
-> 每行的“在做什么”：模型传了 `reasoning` 就显示它（`[确认断言]`）；没传则由内置工具描述目录兜底（`[运行命令]` / `run command`，随 `lang` 切换）。描述是确定性生成的——本项目零 LLM 调用，这是产品红线。
+> **每行的“在做什么”**：模型传了 `reasoning` 就显示它（`[确认断言]`）；没传则由内置工具描述目录兜底（`[运行命令]`，随 `lang` 切换）。描述是确定性生成的——本项目零 LLM 调用，这是产品红线。
 
-### 防打架契约（No-Fight Contract）
+### 防打架契约
 
 pi-helm 的设计目标就是和其它扩展包共处。以下 8 条是它不打架的保证：
 
 | # | 契约 | 实现 |
 |---|---|---|
 | 1 | **零原型补丁** | 只用 `registerToolRenderer` / `registerTool` / 事件 / `ctx.ui`；绝不 patch pi 内部组件原型（扩展互殴崩溃的根源） |
-| 2 | **渲染走解析器链** | `pi.registerToolRenderer((name, next) => …)`：该自绘时才返回，否则 `return next()`。MCP/第三方工具同样适用，load order 决定风格但绝不崩 |
-| 3 | **工具所有权降级梯** | reasoning 头需要拥有工具定义：逐个 `try registerTool(...)`，硬失败（同名已被占）就降级为纯渲染模式——行与折叠保留，reasoning 头去掉，notify 一次 |
+| 2 | **渲染走解析器链** | `pi.registerToolRenderer((name, next) => …)`：该自绘时才返回，否则 `return next()`。MCP 和第三方工具同样适用，load order 决定风格但绝不崩 |
+| 3 | **工具所有权降级梯** | reasoning 头需要拥有工具定义：逐个 `try registerTool(...)`，硬失败（同名已被占）就降级为纯渲染模式——行与折叠保留，reasoning 头去掉，通知一次 |
 | 4 | **命名空间隔离** | UI key 全部 `pi-helm:` 前缀（`setStatus`、药丸 `customType`），不抢别人的槽位 |
 | 5 | **热键可配置** | `"pi-helm": { "hotkey": "ctrl+q" }`；已知冲突见下表；`/mission` 永远可用作逃生门 |
 | 6 | **working message 礼仪** | 仅 phase 变化时 `setWorkingMessage`；`turn_end` 恢复默认；`workingMessage: false` 可关 |
@@ -137,48 +151,52 @@ pi-helm 的设计目标就是和其它扩展包共处。以下 8 条是它不打
 |---|---|---|
 | 另一个折叠/工具卡扩展（如 [pi-tidy](https://github.com/Andy8647/pi-tidy)） | 双方都注册 tool renderer，load order 决定谁的卡片风格生效——不会崩 | 同时只开一个折叠扩展，或把对方工具列进 `neverFold` |
 | 拥有 `bash`/`read`/… 工具定义的扩展 | 我们的 `registerTool` 硬失败 | 自动降级：纯渲染模式 + 一次通知（契约 #3） |
-| `intercom`（`alt+m`）等 `alt+…` 快捷键 | 热键冲突 | 默认 `⌃Q`（裸 ctrl 字节，所有终端可用）；`⌥G` 别名需 Option-as-meta——pi 自身的 `⌥Enter`/`⌥↑` 也依赖同一设置（iTerm2：Profiles→Keys→Left Option = `Esc+`；Terminal.app：Use Option as Meta key） |
+| `intercom`（`alt+m`）等 `alt+…` 快捷键 | 热键冲突 | 默认 `⌃Q`（裸 ctrl 字节，所有终端可用）；`⌥G` 别名需 Option-as-meta——pi 自身的 `⌥Enter`/`⌥↑` 也依赖同一设置（iTerm2：Profiles → Keys → Left Option = `Esc+`；Terminal.app：Use Option as Meta key） |
 
 ## 架构
 
 ```
 src/groups.ts      纯状态机        classifyAssistant · GroupRegistry · buildSummary
                                   · viewPlan · rebuildFromEntries（node --test 直测，零 pi 依赖）
-src/strings.ts     中英文词表      摘要/行尾用词 · 工具描述目录（setLang 切换，纯模块）
-src/styles.ts      显示风格        内置字形/图标/分隔符 · settings style 深合并（纯模块）
+src/strings.ts     中英文词表      摘要/行尾用词 · 工具描述目录（setLang）
+src/styles.ts      显示风格        字形/图标/分隔符/spinner · style 深合并
+                                  · iconFor 解析 · 面板边框算法
+src/width.ts       显示宽度        stringWidth · clipToWidth · cellWidth
+                                  （emoji/CJK 双宽；styles 与 renderers 共用）
 src/renderers.ts   渲染胶水        fmtSummaryLine / fmtRow / fmtPinned · GroupLine
-                                  · 解析器链 · per-call 计时器 · 显示宽度裁剪（emoji/CJK 双宽）
+                                  · 解析器链 · per-call 计时器 · 按显示宽度裁剪
 src/index.ts       接线            事件 → registry · 会话恢复重建 · 冲突降级梯
                                   · 任务状态 · 面板 · 药丸卡 · i18n · /helm
 index.ts           入口 shim       re-export src/index.ts（包入口）
 ```
 
-设计遵守官方文档红线：扩展工厂里不启动任何资源；计时器在 `session_start`/渲染时创建、`session_shutdown` 清理；行为层（药丸卡、计数器）在 JSON/RPC 无头模式下照常可用；颜色全部走语义主题 token（自动适配深浅主题）。
+设计遵守官方文档红线：扩展工厂里不启动任何资源；计时器在 `session_start` 或渲染时创建、`session_shutdown` 清理；行为层（药丸卡、计数器）在 JSON/RPC 无头模式下照常可用；颜色全部走语义主题 token（自动适配深浅主题）。
 
 ## 开发
 
 ```bash
-pi -e ./index.ts              # 热加载测试
-PI_TUI_WRITE_LOG=1 pi -e .    # 调试原始 ANSI 流
+node --test test/groups.test.ts test/lines.test.ts   # 单测
+pi -e ./index.ts                                     # 热加载测试
+PI_TUI_WRITE_LOG=1 pi -e .                           # 调试原始 ANSI 流
 ```
 
-设计意图（三层架构、防打架契约、折叠权衡）见 [`DESIGN.md`](DESIGN.md)；pi `/settings` 逐项说明见 [`docs/pi-settings-guide.md`](docs/pi-settings-guide.md)。官方扩展/TUI API 文档：[pi docs](https://github.com/earendil-works/pi)。
+设计意图——分层、防打架契约、折叠权衡，以及本项目依赖的 pi 运行时契约——见 [`DESIGN.md`](DESIGN.md)。官方扩展/TUI API 文档：[pi docs](https://github.com/earendil-works/pi)。
 
 ## 路线图
 
 - [ ] 子任务折叠：嵌套调用折成一行可展开（基于 `parentToolCallId`）
 - [x] 会话恢复：分组折叠已从 `sessionManager.getBranch()` 重建（任务状态仍为内存态）
 - [ ] L2 下钻：面板内回车跳转到对话流对应位置
-- [x] 配置：热键 / 折叠 / working message 开关已进 `settings.json`（图标与语言默认值待做）
-- [ ] 可选 AI 摘要层（便宜模型蒸馏回合摘要，默认关闭）
+- [x] 配置：热键 / 折叠 / working message 开关已进 `settings.json`
+- [ ] 可选的 AI 摘要层（用便宜模型做回合摘要，默认关闭）
 
 ## 致谢
 
-- [pi-tidy](https://github.com/Andy8647/pi-tidy)（MIT）——仅参考分组*语义*：boundary/carrier 分类、1s 防闪延迟、失败粘滞计数、edit/write 永不折叠。本项目代码全部自写——实例化 `GroupRegistry`（不用模块级全局）、带测试的纯状态机、解析器链而非补丁组件。pi-tidy 有测试是它最对的决定，我们保持这个标准。
+- [pi-tidy](https://github.com/Andy8647/pi-tidy)（MIT）——仅参考分组*语义*：boundary/carrier 分类、1s 防闪延迟、失败粘滞计数、`edit`/`write` 永不折叠。本项目代码全部自写——实例化 `GroupRegistry`（不用模块级全局）、带测试的纯状态机、解析器链而非补丁组件。pi-tidy 有测试是它最对的决定，我们保持这个标准。
 - [pi-tidy-tools](https://github.com/mikeyobrien/pi-tidy-tools)（MIT）——reason-first 两行块、self-shell 密度、实时时钟模式
 - [Pi](https://github.com/earendil-works/pi) 官方文档与示例——`plan-mode`、`minimal-mode`、`custom-footer`、`entry-renderer`
 
-**溯源：** 2026-10-27 研读 `Andy8647/pi-tidy@main`（`tool-groups.ts`、README）的分组语义，未拷贝任何代码——状态机、渲染器、测试均为原创。有意为之的差异：无模块级全局（多会话/reload 安全）、零原型补丁、思考行刻意不进 gutter（YAGNI）、行内 reasoning 头来自我们的 schema 注入。
+**溯源**：分组语义于 2026-10-27 研读自 `Andy8647/pi-tidy@main`（`tool-groups.ts`、README）；未复制任何代码——状态机、渲染器与测试均为原创。刻意差异：无模块级全局（多会话/reload 安全）、零原型补丁、思考行有意不折叠、逐行 reasoning 头经 schema 注入实现。
 
 ## 许可证
 

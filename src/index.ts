@@ -269,7 +269,7 @@ interface HelmConfig {
 	autoRow: boolean;
 	/** New groups open at level 1 (▾ + per-call rows) instead of folded. */
 	defaultExpand: boolean;
-	/** Viewport height for scrollable edit/write boxes (Task 003). */
+	/** Viewport height for scrollable edit/write boxes. */
 	pinnedBodyHeight: number;
 	/** Interface language: settings default; `/lang` flips it for the session. */
 	lang: Lang;

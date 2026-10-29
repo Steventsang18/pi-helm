@@ -377,7 +377,7 @@ export interface ResolverOptions {
 	now?: () => number;
 	/** Display style (glyphs/icons/separators) — settings.json DIY layer. */
 	style?: Style;
-	/** Viewport height for scrollable pinned boxes (Task 003). */
+	/** Viewport height for scrollable pinned boxes. */
 	bodyHeight?: () => number;
 }
 
@@ -386,10 +386,10 @@ const clocks = new Map<string, ReturnType<typeof setInterval>>();
 const reveals = new Map<string, ReturnType<typeof setTimeout>>();
 const componentsByCallId = new Map<string, Set<GroupLine>>();
 const expandedSeen = new Map<string, boolean>();
-/** Pinned-box scroll position per call (Task 003). Cleared on session_shutdown. */
+/** Pinned-box scroll position per call. Cleared on session_shutdown. */
 const pinnedScroll = new Map<string, number>();
 
-/** Default viewport height for scrollable pinned boxes (Task 003). */
+/** Default viewport height for scrollable pinned boxes. */
 export const DEFAULT_PINNED_BODY_HEIGHT = 14;
 
 function rememberComponent(id: string, component: GroupLine): void {
@@ -538,7 +538,7 @@ export function createToolResolver(options: ResolverOptions) {
 		const hits: (Hit | null)[] = [];
 
 		if (registry.isPinned(id)) {
-			// Task 003: fixed-height viewport + wheel scroll for long bodies.
+			// Scrollable pinned box: fixed-height viewport + wheel scroll for long bodies.
 			// Short bodies keep natural height (no indicators, no scroll state).
 			const body = phase === "running" ? argsLines(args) : bodyLines(result);
 			const total = body.length;
@@ -617,7 +617,7 @@ export function createToolResolver(options: ResolverOptions) {
 		invalidate: () => void,
 		revealIn?: number,
 	): GroupLine => {
-		// Task 003: wheel consumer for scrollable pinned boxes. Contain
+		// Wheel consumer for scrollable pinned boxes. Contain
 		// semantics — at the boundary we still consume the event so the
 		// transcript never jumps under the cursor (acceptance 4). Short
 		// bodies return undefined → pi's global scroll keeps working.

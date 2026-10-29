@@ -1,6 +1,6 @@
 {
   "name": "pi-helm",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Mission control for your Pi session: reason-first compact tool cards, live task dashboard, plan progress and a key-point feed - so the terminal stays readable for everyone.",
   "keywords": [
     "pi-package",
@@ -10,6 +10,23 @@
     "compact-tools"
   ],
   "license": "MIT",
+  "author": "stsventsang <gogo1010@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Steventsang18/pi-helm.git"
+  },
+  "homepage": "https://github.com/Steventsang18/pi-helm",
+  "bugs": {
+    "url": "https://github.com/Steventsang18/pi-helm/issues"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "README.md",
+    "README.zh-CN.md",
+    "DESIGN.md",
+    "LICENSE"
+  ],
   "pi": {
     "extensions": ["./index.ts"]
   },

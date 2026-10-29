@@ -505,7 +505,7 @@ test("shortenPath: home dir collapses to ~, odd values pass through", async () =
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 003: pinned (edit/write) scrollable box — fixed viewport + wheel
+// Pinned (edit/write) scrollable box — fixed viewport + wheel scroll
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Render a pinned edit result with an N-line diff through a fresh resolver. */

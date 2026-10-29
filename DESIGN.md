@@ -1,6 +1,6 @@
 # DESIGN — pi-helm 设计意图
 
-> 目的：把架构决策、契约与权衡写死在仓库里，任何会话（开发或审计）都能凭此接手。
+> 目的：把架构决策、契约与权衡写死在仓库里，任何贡献者都能凭此接手。
 > 事实基线见 README；本文件只讲 **为什么**。冲突时以代码 + README 为准。
 
 ## 1. 三层架构分工
@@ -50,15 +50,15 @@ Layer 3  src/index.ts      接线（事件/降级/面板）
 - **reason-first**：行首放 `reasoning` 短语（引导性可选字段，执行前剥离，不改模型行为）——摘要回答“干了什么”，reason 回答“为什么干”。模型没传时由 `strings.ts` 描述目录兜底（`[运行命令]`），**确定性生成，零 LLM 调用是产品红线**；两者不同时出现（reason 优先）。
 - **三级展开**：level 0 摘要行 → level 1 行列表 → level 2 单行完整输出；`Ctrl+O` 整体切换。折叠是纯视图状态，会话恢复时从 `sessionManager.getBranch()` 重建。
 - **单调用不折（`autoRow`，A 方案）**：单成员组没有值得摘要的东西，`▸ 1 call · bash×1` 信息量反而低于它藏起来的那行——直接渲染行（无 header、无 `└` gutter，因为它上方没有可连的摘要）；组变回多成员时照旧折摘要。防闪对它不适用：行就是视图本身，不存在“冒出来又缩回去”。`"autoRow": false` 可关。
-  - **但显式折叠-all 必须能折到它**（审计 2026-10-28 发现的缺陷）：`Ctrl+O` 折叠-all 对单成员组无效——`solo` 分支无视 level。修法：`Group.soloFolded` 标记“level 0 是用户折的”——新单成员组天生 level 0（`openGroup` 种子），naive 的“solo 尊重 level”会把它们全部默认折起，等于静默杀掉 autoRow。只有 `noteSetExpanded(collapse)` 置位，展开时清除；fresh（未折过）不受影响。
-  - **结构不变量**（审计复验确认，这也是 soloFolded 方案成立的根）：`solo=true` → viewPlan 走 solo 分支 → `header` 必为 null → fresh solo 组无头部可点 → **`toggleHeader` 对 fresh solo 组结构上不可达**。因此「单成员 + soloFolded=false + level 1 + 有 header」这个 naive① 触发态不可能存在；toggleHeader 只可能作用于有 header 的单成员组，而那必然已 `soloFolded=true`——不存在第 3 条漏置/漏清路径。
-- **默认展开（`defaultExpand`，用户拍板）**：新分组默认 level 0（折叠）是“省地”取向；要“开门见明细”的用户开此开关——新分组直接 level 1（`▾` 头 + 每成员一行）。只影响新建组（`openGroup` 处生效），已建组的 level 不被运行中配置翻转波及；会话恢复重建时也按当前配置展开。与 `autoRow` 正交：单调用组仍优先直出行。
+  - **但显式折叠-all 必须能折到它**（代码审查 2026-10-28 发现的缺陷）：`Ctrl+O` 折叠-all 对单成员组无效——`solo` 分支无视 level。修法：`Group.soloFolded` 标记“level 0 是用户折的”——新单成员组天生 level 0（`openGroup` 种子），naive 的“solo 尊重 level”会把它们全部默认折起，等于静默杀掉 autoRow。只有 `noteSetExpanded(collapse)` 置位，展开时清除；fresh（未折过）不受影响。
+  - **结构不变量**（复核确认，这也是 soloFolded 方案成立的根）：`solo=true` → viewPlan 走 solo 分支 → `header` 必为 null → fresh solo 组无头部可点 → **`toggleHeader` 对 fresh solo 组结构上不可达**。因此「单成员 + soloFolded=false + level 1 + 有 header」这个 naive① 触发态不可能存在；toggleHeader 只可能作用于有 header 的单成员组，而那必然已 `soloFolded=true`——不存在第 3 条漏置/漏清路径。
+- **默认展开（`defaultExpand`，设计决策）**：新分组默认 level 0（折叠）是“省地”取向；要“开门见明细”的用户开此开关——新分组直接 level 1（`▾` 头 + 每成员一行）。只影响新建组（`openGroup` 处生效），已建组的 level 不被运行中配置翻转波及；会话恢复重建时也按当前配置展开。与 `autoRow` 正交：单调用组仍优先直出行。
 - **摘要行图标化（C 方案）**：`▸ 5 calls · ⚡×3 📖×2`——图标让工具类型一眼可扫；未知工具（MCP 等）保留名字不硬套图标。只改呈现，不加行数。
 - **面板（/mission）是 overlay 不是替换**：Esc 秒关、不打断正在跑的回合；药丸卡经 `appendEntry` 注入，不进 LLM 上下文。
 - **单一内置风格 + DIY 接口**：不搞多主题预设（维护成本高、伪命题——终端里没有真的“Google 风格”）；内置一套经典字形，`settings.style` 逐项覆盖（`marker`/`openMarker`/`rowGutter`/`sep`/`icons`/`spinner`），空值/未知键不生效（手滑不黒屏）。颜色不开放——theme token 是深浅主题自适应和契约 #1 的前提。
 - **运行中 spinner（帧从时钟推导）**：braille `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`（10 帧、全单宽、tmux/SSH 安全），180ms 一帧（≈5.6fps，柔和）。帧号 = `frames[floor(now/180) % len]`——**不新增状态**，同一瞬多个调用点算出同一帧，测试可钉 `now`。应用 4 处：行首 glyph、摘要行 running 段、面板任务标题/任务行。面板当前步骤的 `▶` **不改**——那是指位置，不是指活动。ticker 与帧率同源：per-call 计时器改 180ms（原 1s 会像卡住），面板定时器 180ms 但空闲直接返回不重绘；面板缓存键必须含当前帧，否则缓存会吞掉动画。防闪 `RUNNING_ROW_DELAY_MS` 与 reveal 定时器**未动**。
 - **显示宽度裁剪**：emoji/CJK 是双宽；按 UTF-16 码元数裁剪（旧代码）会把行裁歪/裁半个 emoji。`stringWidth`/`clipLine` 按显示格宽计（含 VS16 提宽、ZWJ 合字、零宽记号），零 pi 依赖。
-- **edit/write 滚动框（Task 003，2026-10-28）**：长 diff 固定视口（`pinnedBodyHeight`，默认 14）+ 头部总行数 + wheel 自滚。**否决了官方 ScrollView**（监工原锚点）：① `routeWheel` 只在 layout 树找 `box.scrollView`，而 layout 树只对实现 `[LAYOUT_NODE]` 的组件下钻，transcript 的 `documentContainer` 是 plain Container → 嵌套 ScrollView 永远不在 wheel 搜索集；② ScrollView 的 `render()` 返回全部行，视口裁剪在 `layoutComponent` 的 scroll 节点分支——不进 layout 树就没有固定高度；③ 要生效必须让 LAYOUT_NODE 贯穿 pi 的容器链 = prototype patch = 违反契约 #1。**替代实现**：wheel 事件经 `parseWheelEvent → dispatchMouseToLayout → Container.handleMouse 逐层委托`到达我们的 GroupLine（源码验证），自管 scrollTop；**contain 语义**——到边界仍消费事件（`render:false`），transcript 绝不跟着跳；短内容返回 `undefined` 放行给全局滚动。若未来 pi 让工具卡参与 layout，可迁回 ScrollView。
+- **edit/write 滚动框（滚动框，2026-10-28）**：长 diff 固定视口（`pinnedBodyHeight`，默认 14）+ 头部总行数 + wheel 自滚。**否决了官方 ScrollView**（初始方案）：① `routeWheel` 只在 layout 树找 `box.scrollView`，而 layout 树只对实现 `[LAYOUT_NODE]` 的组件下钻，transcript 的 `documentContainer` 是 plain Container → 嵌套 ScrollView 永远不在 wheel 搜索集；② ScrollView 的 `render()` 返回全部行，视口裁剪在 `layoutComponent` 的 scroll 节点分支——不进 layout 树就没有固定高度；③ 要生效必须让 LAYOUT_NODE 贯穿 pi 的容器链 = prototype patch = 违反契约 #1。**替代实现**：wheel 事件经 `parseWheelEvent → dispatchMouseToLayout → Container.handleMouse 逐层委托`到达我们的 GroupLine（源码验证），自管 scrollTop；**contain 语义**——到边界仍消费事件（`render:false`），transcript 绝不跟着跳；短内容返回 `undefined` 放行给全局滚动。若未来 pi 让工具卡参与 layout，可迁回 ScrollView。
 
 ## 4. 出处（Provenance）
 

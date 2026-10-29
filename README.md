@@ -13,8 +13,8 @@
 | | Feature | What it does |
 |---|---|---|
 | ⛵ | **Mission overlay** | `⌃Q` (or `/mission`) opens a dashboard: PLAN progress bar · running TASKS with live elapsed · KEY POINTS feed. Esc closes instantly and never blocks the running turn. |
-| 🔍 | **Group folding** | Every tool call between two pieces of assistant text folds into one summary line — `▸ 5 calls · 🔨×3 👀×2 · ✗ 1 failed · 1.2s`. Click the line to unfold the row list (`│` gutter), click a row for its full output. Calls running under 1s never flash a row; failures stick to the summary as `✗ N failed`; edit/write never fold (the diff is the point). |
-| 👀 | **Reason-first rows** | Each row leads with the **why** — a `reasoning` phrase the model is guided to pass: `│ ✗ bash [check test failures] pnpm test · exit 1 · 1.8s`. When the model sends none, a built-in bilingual tool catalog fills the slot. |
+| 🗂 | **Group folding** | Every tool call between two pieces of assistant text folds into one summary line — `▸ 5 calls · 🔨×3 👀×2 · ✗ 1 failed · 1.2s`. Click the line to unfold the row list (`│` gutter), click a row for its full output. Calls running under 1s never flash a row; failures stick to the summary as `✗ N failed`; edit/write never fold (the diff is the point). |
+| 💬 | **Reason-first rows** | Each row leads with the **why** — a `reasoning` phrase the model is guided to pass: `│ ✗ bash [check test failures] pnpm test · exit 1 · 1.8s`. When the model sends none, a built-in bilingual tool catalog fills the slot. |
 | ⏱ | **Live execution clock** | While a tool runs, its card shows a braille spinner plus the elapsed time ticking live; it settles into `✓ done 2.3s` (green) or `✗ error` (red). Errors are never silently collapsed. |
 | 📊 | **Plan progress** | Parses `Plan:` numbered steps + `[DONE:n]` markers from agent output (same approach as the official plan-mode example). Progress bar in the overlay and footer. |
 | 🔑 | **Key-point feed** | Tool errors and milestones are captured deterministically and stamped as pill cards in the transcript (kept out of the LLM context via `appendEntry`). A turn's file changes are auto-summarized as `Turn changes: N files · +a/-b`. |

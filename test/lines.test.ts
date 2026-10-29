@@ -1,5 +1,5 @@
 /**
- * Task 2 tests — pure line formatting + resolver-chain contract.
+ * Line formatting tests — pure + resolver-chain contract.
  * Written first (red), then implemented by src/renderers.ts (green).
  */
 import { test } from "node:test";
@@ -60,7 +60,7 @@ test("spinner ticker: one clock per running call, cleared when it settles (no le
 });
 
 // Running segments now animate: assert against an explicit frame so the test
-// never depends on the wall clock (spec: fixed now → deterministic frame).
+// never depends on the wall clock (fixed now → deterministic frame).
 const F0 = "⠋"; // spinnerFrame(0) === frames[0]
 
 test("fmtSummaryLine: marker, count, icon breakdown, failed, running, duration", () => {
@@ -69,8 +69,8 @@ test("fmtSummaryLine: marker, count, icon breakdown, failed, running, duration",
 });
 
 test("fmtSummaryLine: unknown tools collapse to the fallback icon", () => {
-	// Spec: unknown tools show 🤖, so two different unknown tools merge into
-	// 🤖×2 — accepted by the user (icon grouping over name fidelity).
+	// Unknown tools show 🤖, so two different unknown tools merge into
+	// 🤖×2 — accepted trade-off (icon grouping over name fidelity).
 	const s: GroupSummary = { count: 2, breakdown: [{ name: "mcp__docs__search", count: 2 }], failed: 0, running: 0, durationMs: 0 };
 	assert.equal(fmtSummaryLine(s, 0, th), "▸ 2 calls · 🔌×2", "mcp__* shares the mcp icon");
 	const unknown: GroupSummary = { count: 2, breakdown: [{ name: "my_custom_tool", count: 2 }], failed: 0, running: 0, durationMs: 0 };
@@ -250,7 +250,7 @@ test("resolver: ctrl+o style expanded flips are translated, per-call", () => {
 	assert.equal(registry.planFor("c1")!.full, true, "solo: expand goes straight to the full box");
 	mine.renderCall({ command: "x" }, th, ctxFor("c1", false)); // ctrl+o off = collapse-all
 	const folded = registry.planFor("c1")!;
-	assert.equal(folded.line, false, "collapse-all now reaches the solo group (audit fix)");
+	assert.equal(folded.line, false, "collapse-all now reaches the solo group (fix)");
 	assert.equal(folded.header, "closed", "what remains is the summary line");
 });
 
@@ -350,7 +350,7 @@ test("panel rules: 🤖 title and a ZWJ/single-width label keep the right edge a
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Running spinner (Task: spinner animation, spec-fixed frame from the clock)
+// Running spinner (frame derived from the clock)
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("spinnerFrame: clock-derived index, 180ms per frame, wraps both ways", async () => {
@@ -437,7 +437,7 @@ test("3a: pinned (edit/write) card carries ↑↓ usage and duration", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Requirement 1: bilingual description fallback when the model sent no reason
+// Bilingual description fallback when the model sent no reason
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("desc: catalog fills the reason slot in zh/en; model reasoning wins", async () => {

@@ -1,5 +1,5 @@
 /**
- * Task 1 tests — pure state machine, no pi dependency.
+ * State machine tests — pure, no pi dependency.
  * Written first (red), then implemented by src/groups.ts (green).
  *
  * Semantics absorbed from pi-tidy's grouping model (boundary/carrier/plain,
@@ -285,7 +285,7 @@ test("expand: ctrl+o expanded flag is translated into levels", () => {
 	assert.equal(r.planFor("b")!.line, false);
 });
 
-// ── defaultExpand: new groups open at level 1 (supervisor spec, 2026-10-28) ──
+// ── defaultExpand: new groups open at level 1 (design decision, 2026-10-28) ──
 test("defaultExpand: false by default → new groups fold to level 0", () => {
 	const r = new GroupRegistry();
 	r.report({ callId: "a", toolName: "bash", status: "ok" });
@@ -332,7 +332,7 @@ test("defaultExpand: setDefaultExpand flips only groups opened after the call", 
 });
 
 // ── autoRow × collapse-all: an explicit fold must reach solo groups too ──────
-// (audit 2026-10-28 defect: naive "solo respects level" would fold every fresh
+// (2026-10-28 defect: naive "solo respects level" would fold every fresh
 // solo group — they are level 0 by construction — killing autoRow's default.
 // soloFolded marks "level 0 because the user folded", distinct from "fresh".)
 test("autoRow×collapse-all: explicit fold collapses a solo group to its summary", () => {
@@ -399,7 +399,7 @@ test("registry.planFor: a grouped running row still earns its keep after 1s (ant
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// rebuildFromEntries — session restore (Task 4)
+// rebuildFromEntries — session restore
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Shaped like pi's SessionMessageEntry / AssistantMessage / ToolResultMessage. */

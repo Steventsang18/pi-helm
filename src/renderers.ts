@@ -93,7 +93,7 @@ export interface RowParts {
 	/**
 	 * Localized "what this tool does" (`运行命令`) — fills the reason slot
 	 * only when the model sent no reasoning: reason-first stays primary, the
-	 * catalog is the deterministic bilingual fallback (§requirement 1).
+	 * catalog is the deterministic bilingual fallback.
 	 */
 	desc?: string;
 	/** Command / path — what the call is about. */

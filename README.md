@@ -110,7 +110,7 @@ Config (`~/.pi/agent/settings.json`, requires a pi **restart** — `/reload` can
 | `defaultExpand` | `false` | New groups open expanded (`▾` header + one row per call); default stays folded until the header is clicked |
 | `pinnedBodyHeight` | `14` | Viewport height (4–40) for the edit/write scroll box; short bodies stay natural-height, only longer ones scroll |
 | `lang` | `"en"` | Interface language default; flip per session with `/lang zh\|en` |
-| `style` | `{}` | DIY display layer: override `marker`/`openMarker`/`rowGutter`/`sep`/`icons`/`spinner` item by item; unknown/empty values are ignored; colors stay pi semantic theme tokens (dark/light safe). `spinner` is a frame array (default braille `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`; every frame must be single-width; 180ms per frame) |
+| `style` | `{}` | DIY display layer: override `marker`/`openMarker`/`rowGutter`/`sep`/`icons`/`spinner` item by item; unknown/empty values are ignored; colors stay pi semantic theme tokens (dark/light safe). `spinner` is a frame array (default braille `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`; every frame must be single-width; 180ms per frame). `icons` has two special keys: `mcp` (prefix-matches every `mcp__*`) and `"*"` (fallback, default 🤖). Icons must be 2 display cells wide or summary rows and panel borders bend |
 
 > **限制**：`hotkey` 与 `enabled`（reasoning 注入）是**注册期**配置，只认全局 `settings.json`（pi 1.3.0 在扩展加载期不给 `getSettings()`，只能直读全局文件）；project settings 里的这两项不生效。其余键（折叠/风格/语言/defaultExpand 等）在 `session_start` 官方重读，project 覆盖正常合并。
 >

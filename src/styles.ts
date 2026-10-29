@@ -12,6 +12,8 @@
  * (No-Fight contract: no hardcoded color values).
  */
 
+import { stringWidth } from "./width.ts";
+
 export interface Style {
 	/** Folded group header marker: `▸`. */
 	marker: string;
@@ -51,7 +53,10 @@ export function spinnerFrame(nowMs: number, frames: readonly string[] = DEFAULT_
 	return list[(index + list.length) % list.length];
 }
 
-/** Emoji Presentation set the classic look ships with (also used by pinned cards). */
+/**
+ * Summary/pinned tool icons. Widening note: keep every icon two display cells
+ * wide — the summary breakdown and panel borders assume it (a test guards it).
+ */
 export const TOOL_ICONS: Record<string, string> = {
 	read: "📖",
 	bash: "⚡",
@@ -60,7 +65,37 @@ export const TOOL_ICONS: Record<string, string> = {
 	grep: "🔎",
 	find: "🗂",
 	ls: "📂",
+	web_search: "🌐",
+	workflow: "🔀",
+	/** Prefix rule: every `mcp__*` tool shares this icon. */
+	mcp: "🔌",
+	intercom: "💬",
+	/** Fallback for anything else (DIY can override this key). */
+	"*": "🤖",
 };
+
+/**
+ * Pure: how many `─` fill a panel rule so the closing corner lands on the same
+ * column as the other rules. Counts **display cells** (`🤖` is 2 UTF-16 units
+ * *and* 2 cells — a coincidence the old `.length` math relied on; a ZWJ or a
+ * single-width glyph would have bent the box).
+ */
+export function panelRuleDashes(label: string, inner: number): number {
+	// `┌─ ` + label + ` ` + dashes + corner === inner + 3 cells wide
+	return Math.max(0, inner - stringWidth(label) - 2);
+}
+
+/**
+ * Pure: the icon for a tool name. Exact match → MCP prefix → fallback.
+ * Reads the *given* icon table, so settings.json `style.icons` overrides
+ * (including `mcp` and `*`) take effect everywhere.
+ */
+export function iconFor(toolName: string, icons: Record<string, string> = TOOL_ICONS): string {
+	const exact = icons[toolName];
+	if (exact) return exact;
+	if (toolName.startsWith("mcp__") || toolName.startsWith("mcp")) return icons.mcp ?? "🔌";
+	return icons["*"] ?? "🤖";
+}
 
 export const DEFAULT_STYLE: Style = {
 	marker: "▸",

@@ -34,7 +34,7 @@ import { join } from "node:path";
 import { GroupRegistry, buildSummary, classifyAssistant, rebuildFromEntries, type EntryLike, type ToolCallRecord } from "./groups.ts";
 import { createToolResolver, disposeAllRenderers, fmtSummaryLine, type ThemeLike } from "./renderers.ts";
 import { setLang } from "./strings.ts";
-import { DEFAULT_STYLE, mergeStyle, spinnerFrame, SPINNER_FRAME_MS, type Style } from "./styles.ts";
+import { DEFAULT_STYLE, mergeStyle, panelRuleDashes, spinnerFrame, SPINNER_FRAME_MS, type Style } from "./styles.ts";
 
 const STATUS_KEY = "pi-helm:mission";
 const PILL_TYPE = "pi-helm:pill";
@@ -423,9 +423,12 @@ class MissionOverlay {
 		const lines: string[] = [];
 		const inner = Math.max(20, width - 4);
 
+		// Dashes counted in display cells, not UTF-16 units: 🤖 happens to be
+		// 2/2 today, but a single-width or ZWJ prefix would bend the border.
+		const title = `🤖 ${tt.mission}`;
 		lines.push(
-			th.fg("accent", `┌─ ${tt.mission} `) +
-				th.fg("dim", `${"─".repeat(Math.max(0, inner - tt.mission.length - 2))}`) +
+			th.fg("accent", `┌─ ${title} `) +
+				th.fg("dim", `${"─".repeat(panelRuleDashes(title, inner))}`) +
 				th.fg("accent", "┐"),
 		);
 
@@ -485,7 +488,7 @@ class MissionOverlay {
 
 		lines.push(
 			th.fg("dim", `└─ ${tt.help}`) +
-				th.fg("dim", `${"─".repeat(Math.max(0, inner - tt.help.length - 2))}`) +
+				th.fg("dim", `${"─".repeat(panelRuleDashes(tt.help, inner))}`) +
 				th.fg("dim", "┘"),
 		);
 

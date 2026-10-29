@@ -8,7 +8,8 @@
 ```
 Layer 1  src/groups.ts     纯状态机
          src/strings.ts    中英文词表（纯数据 + setLang）
-         src/styles.ts     显示风格 + DIY 合并（纯数据）
+         src/styles.ts     显示风格 + DIY 合并 + 图标解析（纯数据）
+         src/width.ts      显示宽度工具（emoji/CJK 双宽；被 renderers 与 styles 共用）
 Layer 2  src/renderers.ts  渲染胶水
 Layer 3  src/index.ts      接线（事件/降级/面板）
          index.ts          入口 shim（re-export src/index.ts）
@@ -18,7 +19,8 @@ Layer 3  src/index.ts      接线（事件/降级/面板）
 |---|---|---|---|
 | L1 `groups.ts` | boundary/carrier/plain 分类、分组注册表、摘要构建、viewPlan、`rebuildFromEntries` | 零 pi import、零主题、零副作用、零模块全局（实例化 registry，避免多会话/reload 竞态） | `node --test` 直测 |
 | L1 `strings.ts` | 摘要/行尾用词（call/failed/running/lines/done）+ 工具描述目录 | 零 pi import；只放界面用词，不放业务逻辑 | `setLang` 后直测断言 |
-| L1 `styles.ts` | 内置字形/图标/分隔符；settings `style` 覆盖的深合并 | 零 pi import；不放颜色（颜色是 theme token 的事） | merge/覆盖规则直测 |
+| L1 `styles.ts` | 内置字形/图标/分隔符；settings `style` 覆盖的深合并；`iconFor` 解析（精确 → `mcp` 前缀 → `*` 兜底）；面板边框 dash 宽度 | 零 pi import；不放颜色（颜色是 theme token 的事） | merge/覆盖/图标/边框规则直测 |
+| L1 `width.ts` | 显示宽度工具（`stringWidth`/`clipToWidth`/`cellWidth`）：emoji/CJK 双宽、VS16 提宽、ZWJ 合字、零宽记号 | 零 pi import；被 renderers 与 styles 共用（所以必须独立成模块，否则两者循环依赖） | 宽度断言直测 |
 | L2 `renderers.ts` | 纯行格式化（`fmtSummaryLine`/`fmtRow`/`fmtPinned`）、自壳 `GroupLine`、`registerToolRenderer` 解析器链、per-call 计时器、显示宽度裁剪 | 结构性代码才能被直测——不 import pi 运行时 | 导入本文件直接测 |
 | L3 `index.ts` | 事件 → registry、会话恢复重建、冲突降级梯、任务状态、面板、药丸卡、i18n、`/helm` | 不放可单测的业务逻辑 | 手动/集成 |
 

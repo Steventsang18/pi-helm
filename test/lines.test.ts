@@ -68,9 +68,13 @@ test("fmtSummaryLine: marker, count, icon breakdown, failed, running, duration",
 	assert.equal(fmtSummaryLine(summary, 1, th, undefined, F0), "▾ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ⠋ 1 running · 1.2s");
 });
 
-test("fmtSummaryLine: unknown tools keep their name in the breakdown", () => {
+test("fmtSummaryLine: unknown tools collapse to the fallback icon", () => {
+	// Spec: unknown tools show 🤖, so two different unknown tools merge into
+	// 🤖×2 — accepted by the user (icon grouping over name fidelity).
 	const s: GroupSummary = { count: 2, breakdown: [{ name: "mcp__docs__search", count: 2 }], failed: 0, running: 0, durationMs: 0 };
-	assert.equal(fmtSummaryLine(s, 0, th), "▸ 2 calls · mcp__docs__search×2");
+	assert.equal(fmtSummaryLine(s, 0, th), "▸ 2 calls · 🔌×2", "mcp__* shares the mcp icon");
+	const unknown: GroupSummary = { count: 2, breakdown: [{ name: "my_custom_tool", count: 2 }], failed: 0, running: 0, durationMs: 0 };
+	assert.equal(fmtSummaryLine(unknown, 0, th), "▸ 2 calls · 🤖×2");
 });
 
 test("fmtSummaryLine: zh words (setLang) and DIY style glyphs", async () => {
@@ -298,6 +302,51 @@ test("buildSummary: aggregates usage across members", () => {
 test("buildSummary: no usage → usage field undefined", () => {
 	const s = buildSummary([{ callId: "1", toolName: "bash", status: "ok" }]);
 	assert.equal(s.usage, undefined);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Icon resolution (Task: icon table extension + 🤖 fallback)
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("iconFor: exact match, mcp prefix, and fallback branches", async () => {
+	const { iconFor } = await import("../src/styles.ts");
+	assert.equal(iconFor("bash"), "⚡", "exact");
+	assert.equal(iconFor("web_search"), "🌐");
+	assert.equal(iconFor("workflow"), "🔀");
+	assert.equal(iconFor("mcp__github__search"), "🔌", "mcp__ prefix");
+	assert.equal(iconFor("mcpSomething"), "🔌", "bare mcp prefix");
+	assert.equal(iconFor("totally_unknown_tool"), "🤖", "fallback");
+});
+
+test("iconFor: DIY overrides for mcp and the fallback key take effect", async () => {
+	const { iconFor, mergeStyle } = await import("../src/styles.ts");
+	const diy = mergeStyle({ icons: { "*": "❓", mcp: "🧩" } });
+	assert.equal(iconFor("totally_unknown_tool", diy.icons), "❓");
+	assert.equal(iconFor("mcp__x", diy.icons), "🧩");
+	assert.equal(iconFor("bash", diy.icons), "⚡", "untouched keys keep defaults");
+});
+
+test("all default icons are exactly two cells (border/alignment guard)", async () => {
+	const { TOOL_ICONS } = await import("../src/styles.ts");
+	const { stringWidth } = await import("../src/width.ts");
+	for (const [name, icon] of Object.entries(TOOL_ICONS)) {
+		assert.equal(stringWidth(icon), 2, `icon for ${name} must be 2 cells wide`);
+	}
+});
+
+test("panel rules: 🤖 title and a ZWJ/single-width label keep the right edge aligned", async () => {
+	const { panelRuleDashes } = await import("../src/styles.ts");
+	const { stringWidth } = await import("../src/width.ts");
+	const inner = 60;
+	const line = (label: string) => `┌─ ${label} ${"─".repeat(panelRuleDashes(label, inner))}┐`;
+	const top = line("🤖 MISSION");
+	const bottom = line("↑↓ select · Enter/Esc close");
+	assert.equal(stringWidth(top), stringWidth(bottom), "top and bottom rules share one width");
+	assert.ok(top.endsWith("┐") && bottom.endsWith("┐"));
+	// the regression the old `.length` math would fail: a ZWJ label is 5 UTF-16
+	// units but 2 cells — length-based dashes would come up 3 cells short
+	const zwj = line("👨‍💻 X");
+	assert.equal(stringWidth(zwj), stringWidth(bottom), "ZWJ label must not bend the box");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

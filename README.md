@@ -13,12 +13,12 @@
 | | Feature | What it does |
 |---|---|---|
 | ⛵ | **Mission overlay** | `⌃Q` (or `/mission`) opens a dashboard: PLAN progress bar · running TASKS with live elapsed · KEY POINTS feed. Esc closes instantly and never blocks the running turn. |
-| 🗂 | **Group folding** | Every tool call between two pieces of assistant text folds into one summary line — `▸ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s`. Click the line to unfold the row list (`│` gutter), click a row for its full output. Calls running under 1s never flash a row; failures stick to the summary as `✗ N failed`; edit/write never fold (the diff is the point). |
-| 📖 | **Reason-first rows** | Each row leads with the **why** — a `reasoning` phrase the model is guided to pass: `│ ✗ bash [check test failures] pnpm test · exit 1 · 1.8s`. When the model sends none, a built-in bilingual tool catalog fills the slot. |
+| 🔍 | **Group folding** | Every tool call between two pieces of assistant text folds into one summary line — `▸ 5 calls · 🔨×3 👀×2 · ✗ 1 failed · 1.2s`. Click the line to unfold the row list (`│` gutter), click a row for its full output. Calls running under 1s never flash a row; failures stick to the summary as `✗ N failed`; edit/write never fold (the diff is the point). |
+| 👀 | **Reason-first rows** | Each row leads with the **why** — a `reasoning` phrase the model is guided to pass: `│ ✗ bash [check test failures] pnpm test · exit 1 · 1.8s`. When the model sends none, a built-in bilingual tool catalog fills the slot. |
 | ⏱ | **Live execution clock** | While a tool runs, its card shows a braille spinner plus the elapsed time ticking live; it settles into `✓ done 2.3s` (green) or `✗ error` (red). Errors are never silently collapsed. |
 | 📊 | **Plan progress** | Parses `Plan:` numbered steps + `[DONE:n]` markers from agent output (same approach as the official plan-mode example). Progress bar in the overlay and footer. |
 | 🔑 | **Key-point feed** | Tool errors and milestones are captured deterministically and stamped as pill cards in the transcript (kept out of the LLM context via `appendEntry`). A turn's file changes are auto-summarized as `Turn changes: N files · +a/-b`. |
-| 🎚 | **Streaming phase indicator** | The status line live-switches between `✻ thinking…` and `✍ writing…` while the assistant streams. |
+| 🎚 | **Streaming phase indicator** | The status line live-switches between `🧠 thinking…` and `✍ writing…` while the assistant streams. |
 | 🌐 | **i18n** | Interface strings in Chinese or English, switch any time with `/lang zh|en`. Prompt-side text stays English. |
 
 Zero runtime dependencies beyond Pi's own packages. Pure rendering: no Pi source changes, no LLM calls, no model-behavior changes (the `reasoning` param is a guided, optional schema field stripped before execution).
@@ -37,7 +37,7 @@ This registers the package in `~/.pi/agent/settings.json`. **Restart pi** afterw
 
 1. Restart pi.
 2. Ask for anything that runs tools (e.g. "run the tests").
-3. You should see the tool calls folded into one summary line with a `▸` marker, e.g. `▸ 2 calls · ⚡×1 📖×1 · 1.1s`.
+3. You should see the tool calls folded into one summary line with a `▸` marker, e.g. `▸ 2 calls · 🔨×1 👀×1 · 1.1s`.
 
 If you see pi's default tool boxes instead, the extension did not load — check `/mission` (it should open the overlay) and pi's startup output for extension errors.
 
@@ -75,8 +75,8 @@ and marks steps done with `[DONE:n]` markers.
 Three levels, one click at a time:
 
 ```
- ▸ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s             ← level 0: folded to one line
- ▾ 5 calls · ⚡×3 📖×2 · ✗ 1 failed · 1.2s             ← level 1: click the summary
+ ▸ 5 calls · 🔨×3 👀×2 · ✗ 1 failed · 1.2s             ← level 0: folded to one line
+ ▾ 5 calls · 🔨×3 👀×2 · ✗ 1 failed · 1.2s             ← level 1: click the summary
  │ ✓ bash [check test failures] pnpm test · exit 1 · 1.8s
  │ ✓ read src/app.ts · 120 lines · 0.0s
  │ ✗ bash [verify the fix] pnpm test · exit 1 · 1.2s   ← level 2: click a row
@@ -108,7 +108,7 @@ Three levels, one click at a time:
     "defaultExpand": false,
     "pinnedBodyHeight": 14,
     "lang": "en",
-    "style": { "marker": "▸", "icons": { "bash": "⚡" }, "spinner": ["⠋", "⠙", "⠹"] }
+    "style": { "marker": "▸", "icons": { "bash": "🔨" }, "spinner": ["⠋", "⠙", "⠹"] }
   }
 }
 ```
@@ -117,7 +117,7 @@ Three levels, one click at a time:
 |---|---|---|
 | `enabled` | `true` | Master switch (same as `/helm off`) |
 | `hotkey` | `"ctrl+q"` | Dashboard hotkey; `/mission` always works as the escape hatch |
-| `workingMessage` | `true` | Streaming phase text in the working line (`✻ thinking…` / `✍ writing…`) |
+| `workingMessage` | `true` | Streaming phase text in the working line (`🧠 thinking…` / `✍ writing…`) |
 | `fold` | `true` | Group folding itself |
 | `neverFold` | `[]` | Tool names that keep their own rendering untouched |
 | `autoRow` | `true` | A one-call group skips the `▸ 1 call` wrapper and shows its row directly (`└ ✓ bash …`) |
@@ -189,18 +189,18 @@ Regenerate with: `node scripts/demo-fold.ts --plain`
 
 ```
 == [1] Folded group (level 0) — three tool calls between two replies ==
-▸ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+▸ 3 calls · 🔨×2 👀×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
   ← one line: counts, icons, failure count, token usage, duration
 
 == [2] Click the summary (level 1) — one row per call, │ gutter ==
-▾ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+▾ 3 calls · 🔨×2 👀×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
 └ ✓ bash [check the working tree] git status --short · 4 lines · 100ms
 └ ✓ read [see what changed] src/app.ts · 120 lines · 30ms
 └ ✗ bash [run the tests] pnpm test · FAIL test/app.test.ts · ↑1.2k ↓169 · 1.8s
   ← ✓/✗ state, reason phrase, target, outcome, usage, duration per row
 
 == [3] Click a row (level 2) — that call's full output ==
-▾ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+▾ 3 calls · 🔨×2 👀×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
 └ ✓ bash [check the working tree] git status --short · 4 lines · 100ms
 └ ✓ read [see what changed] src/app.ts · 120 lines · 30ms
 └ ✗ bash [run the tests] pnpm test · FAIL test/app.test.ts · ↑1.2k ↓169 · 1.8s
@@ -208,7 +208,7 @@ FAIL test/app.test.ts
 AssertionError: expected 1 to be 2
 
 == [4] Ctrl+O collapse-all — back to the summary line ==
-▸ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+▸ 3 calls · 🔨×2 👀×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
 
 == [5] edit/write never fold — the diff is the point, and it cuts the group ==
 ✓ ✏️ edit src/app.ts · +1/−1 · ↑800 ↓40 · 300ms · 4 lines
@@ -238,7 +238,7 @@ AssertionError: expected 1 to be 2
   ← viewport capped at pinnedBodyHeight (default 14); the wheel scrolls it
 
 == [7] Anti-flicker — a call under 1s stays hidden; from 1s it surfaces with a live clock ==
-▸ 2 calls · ⚡×2 · ⠴ 2 running
+▸ 2 calls · 🔨×2 · ⠴ 2 running
 └ ⠴ bash [rebuild the bundle] pnpm build · running 1.5s
   ← only the call over 1s appears; the short one is hidden on purpose
 
@@ -251,19 +251,19 @@ AssertionError: expected 1 to be 2
   ← one call = nothing worth summarizing; the row IS the view
 
 == [10] defaultExpand — a new group opens at level 1 without a click ==
-▾ 2 calls · 🔎×1 📂×1 · 30ms
+▾ 2 calls · 🧲×1 🔦×1 · 30ms
 └ ✓ grep [find leftovers] TODO · 2 lines · 20ms
 └ ✓ ls [list the sources] src · 3 lines · 10ms
   ← ▾ header + one row per call, straight away
 
 == [11] Iconized summary — tools sharing an icon merge, distinct icons stay separate ==
-▸ 6 calls · 🤖×2 🔌×2 🌐×1 🔀×1 · 2.8s
+▸ 7 calls · 🤖×2 🔍×1 🔌×2 🌐×1 🔀×1 · 2.9s
   ← both mcp tools merge into 🔌×2; both unknowns merge into 🤖×2
   ← 🌐 and 🔀 keep their own icons (distinct icons never merge)
 
 == [12] Bilingual word tables — the same summary in zh and en ==
   zh: (Chinese vocabulary — omitted here to keep this file ASCII; run the script to see it)
-  en: ▸ 2 calls · ⚡×1 📖×1 · 840ms
+  en: ▸ 2 calls · 🔨×1 👀×1 · 840ms
   ← same data, two vocabularies; /lang switches live
 
 Every line above came from the real formatters and state machine in src/.

@@ -64,8 +64,8 @@ test("spinner ticker: one clock per running call, cleared when it settles (no le
 const F0 = "⠋"; // spinnerFrame(0) === frames[0]
 
 test("fmtSummaryLine: marker, count, icon breakdown, failed, running, duration", () => {
-	assert.equal(fmtSummaryLine(summary, 0, th, undefined, F0), "▸ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ⠋ 1 running · 1.2s");
-	assert.equal(fmtSummaryLine(summary, 1, th, undefined, F0), "▾ 5 calls · ⚡×3 📖×2 · ✗ 2 failed · ⠋ 1 running · 1.2s");
+	assert.equal(fmtSummaryLine(summary, 0, th, undefined, F0), "▸ 5 calls · 🔨×3 👀×2 · ✗ 2 failed · ⠋ 1 running · 1.2s");
+	assert.equal(fmtSummaryLine(summary, 1, th, undefined, F0), "▾ 5 calls · 🔨×3 👀×2 · ✗ 2 failed · ⠋ 1 running · 1.2s");
 });
 
 test("fmtSummaryLine: unknown tools collapse to the fallback icon", () => {
@@ -82,19 +82,19 @@ test("fmtSummaryLine: zh words (setLang) and DIY style glyphs", async () => {
 	const { mergeStyle } = await import("../src/styles.ts");
 	setLang("zh");
 	try {
-		assert.equal(fmtSummaryLine(summary, 0, th, undefined, F0), "▸ 5 次调用 · ⚡×3 📖×2 · ✗ 2 次失败 · ⠋ 1 个运行中 · 1.2s");
+		assert.equal(fmtSummaryLine(summary, 0, th, undefined, F0), "▸ 5 次调用 · 🔨×3 👀×2 · ✗ 2 次失败 · ⠋ 1 个运行中 · 1.2s");
 	} finally {
 		setLang("en");
 	}
 	const diy = mergeStyle({ marker: "❯", openMarker: "⌄", rowGutter: "┆", sep: "|", icons: { bash: "BASH" } });
-	assert.equal(fmtSummaryLine(summary, 0, th, diy, F0), "❯ 5 calls | BASH×3 📖×2 | ✗ 2 failed | ⠋ 1 running | 1.2s");
+	assert.equal(fmtSummaryLine(summary, 0, th, diy, F0), "❯ 5 calls | BASH×3 👀×2 | ✗ 2 failed | ⠋ 1 running | 1.2s");
 	// custom icon never drops the other defaults
-	assert.equal(diy.icons.read, "📖");
+	assert.equal(diy.icons.read, "👀");
 });
 
 test("fmtSummaryLine: quiet group omits failed/running/duration", () => {
 	const quiet: GroupSummary = { count: 1, breakdown: [{ name: "read", count: 1 }], failed: 0, running: 0, durationMs: 0 };
-	assert.equal(fmtSummaryLine(quiet, 0, th), "▸ 1 call · 📖×1");
+	assert.equal(fmtSummaryLine(quiet, 0, th), "▸ 1 call · 👀×1");
 	assert.equal(fmtSummaryLine({ count: 0, breakdown: [], failed: 0, running: 0, durationMs: 0 }, 0, th), "▸ 0 calls");
 });
 
@@ -310,7 +310,7 @@ test("buildSummary: no usage → usage field undefined", () => {
 
 test("iconFor: exact match, mcp prefix, and fallback branches", async () => {
 	const { iconFor } = await import("../src/styles.ts");
-	assert.equal(iconFor("bash"), "⚡", "exact");
+	assert.equal(iconFor("bash"), "🔨", "exact");
 	assert.equal(iconFor("web_search"), "🌐");
 	assert.equal(iconFor("workflow"), "🔀");
 	assert.equal(iconFor("mcp__github__search"), "🔌", "mcp__ prefix");
@@ -323,7 +323,7 @@ test("iconFor: DIY overrides for mcp and the fallback key take effect", async ()
 	const diy = mergeStyle({ icons: { "*": "❓", mcp: "🧩" } });
 	assert.equal(iconFor("totally_unknown_tool", diy.icons), "❓");
 	assert.equal(iconFor("mcp__x", diy.icons), "🧩");
-	assert.equal(iconFor("bash", diy.icons), "⚡", "untouched keys keep defaults");
+	assert.equal(iconFor("bash", diy.icons), "🔨", "untouched keys keep defaults");
 });
 
 // ── summary breakdown merges by icon (display layer only) ────────────────────
@@ -348,7 +348,7 @@ test("summary breakdown: two different unknown tools merge into 🤖×2", () => 
 });
 
 test("summary breakdown: distinct icons stay separate, in input order", () => {
-	assert.equal(fmtSummaryLine(breakdownOf([["bash", 2], ["read", 1]]), 0, th), "▸ 3 calls · ⚡×2 📖×1");
+	assert.equal(fmtSummaryLine(breakdownOf([["bash", 2], ["read", 1]]), 0, th), "▸ 3 calls · 🔨×2 👀×1");
 });
 
 test("summary breakdown: mixed counts of one icon add up (🔌×3)", () => {
@@ -356,7 +356,7 @@ test("summary breakdown: mixed counts of one icon add up (🔌×3)", () => {
 });
 
 test("summary breakdown: first appearance wins the slot (read before bash)", () => {
-	assert.equal(fmtSummaryLine(breakdownOf([["read", 1], ["bash", 1]]), 0, th), "▸ 2 calls · 📖×1 ⚡×1");
+	assert.equal(fmtSummaryLine(breakdownOf([["read", 1], ["bash", 1]]), 0, th), "▸ 2 calls · 👀×1 🔨×1");
 });
 
 test("all default icons are exactly two cells (border/alignment guard)", async () => {
@@ -498,22 +498,22 @@ test("desc: catalog fills the reason slot in zh/en; model reasoning wins", async
 test("stringWidth: ascii=1, CJK=2, emoji=2, VS16 widens, marks add nothing", () => {
 	assert.equal(stringWidth("abc"), 3);
 	assert.equal(stringWidth("中文"), 4);
-	assert.equal(stringWidth("⚡"), 2);
-	assert.equal(stringWidth("📖×2"), 4);
+	assert.equal(stringWidth("🔨"), 2);
+	assert.equal(stringWidth("👀×2"), 4);
 	assert.equal(stringWidth("✏️"), 2, "U+270F is narrow until VS16 flips it");
 	assert.equal(stringWidth("✓✗●▸└"), 5, "box/dingbat glyphs stay single-width");
 	assert.equal(stringWidth("👨‍💻"), 2, "ZWJ sequence counts as one emoji");
 });
 
 test("GroupLine.render: clipping lands on a cell boundary, never mid-emoji", () => {
-	const line = new GroupLine(() => ({ lines: ["⚡⚡⚡".padEnd(0) + "abcdefgh"], hits: [null] }), () => {});
+	const line = new GroupLine(() => ({ lines: ["🔨🔨🔨".padEnd(0) + "abcdefgh"], hits: [null] }), () => {});
 	const out = line.render(6)[0];
 	assert.equal(stringWidth(out.replace("…", "")), 6);
 	assert.ok(out.endsWith("…"));
 	// an emoji that would straddle the boundary is dropped, not halved
-	const line2 = new GroupLine(() => ({ lines: ["abc⚡"], hits: [null] }), () => {});
+	const line2 = new GroupLine(() => ({ lines: ["abc🔨"], hits: [null] }), () => {});
 	const out2 = line2.render(4)[0];
-	assert.equal(out2, "abc…", "⚡ (2 cells) does not fit in 4th cell");
+	assert.equal(out2, "abc…", "🔨 (2 cells) does not fit in 4th cell");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

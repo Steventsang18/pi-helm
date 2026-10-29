@@ -13,12 +13,12 @@
 | | 特性 | 作用 |
 |---|---|---|
 | ⛵ | **指挥台面板** | `⌃Q`（或 `/mission`）呼出仪表盘：计划进度条 · 运行中任务（耗时实时跳动）· 要点流。Esc 秒关，绝不打断正在跑的回合。 |
-| 🗂 | **分组折叠** | 两段 assistant 正文之间的全部工具调用折成一行摘要——`▸ 5 次调用 · ⚡×3 📖×2 · ✗ 1 次失败 · 1.2s`。点摘要展开行列表（`│` 竖线），点某行看完整输出。跑不到 1s 的调用绝不闪现；失败以 `✗ N 次失败` 粘在摘要上；`edit`/`write` 永不折叠（diff 才是重点）。 |
-| 📖 | **Reason-first 行** | 每行开头是**为什么干**——模型被引导传入的 `reasoning` 短语：`│ ✗ bash [确认哪个断言挂了] pnpm test · exit 1 · 1.8s`。模型没传时，内置中英双语工具描述目录兜底。 |
+| 🔍 | **分组折叠** | 两段 assistant 正文之间的全部工具调用折成一行摘要——`▸ 5 次调用 · 🔨×3 👀×2 · ✗ 1 次失败 · 1.2s`。点摘要展开行列表（`│` 竖线），点某行看完整输出。跑不到 1s 的调用绝不闪现；失败以 `✗ N 次失败` 粘在摘要上；`edit`/`write` 永不折叠（diff 才是重点）。 |
+| 👀 | **Reason-first 行** | 每行开头是**为什么干**——模型被引导传入的 `reasoning` 短语：`│ ✗ bash [确认哪个断言挂了] pnpm test · exit 1 · 1.8s`。模型没传时，内置中英双语工具描述目录兜底。 |
 | ⏱ | **执行实时时钟** | 工具运行时卡片显示盲文 spinner 加实时跳动的耗时；结束后落成 `✓ 完成 2.3s`（绿）或 `✗ 出错`（红）。错误永不被静默折叠。 |
 | 📊 | **计划进度** | 解析 agent 输出里的 `Plan:` 编号步骤与 `[DONE:n]` 标记（与官方 plan-mode 示例同款方案）。进度条同时出现在面板和状态行。 |
 | 🔑 | **要点流** | 工具错误和里程碑被确定性捕获，盖成药丸卡嵌入对话流（经 `appendEntry`，不进 LLM 上下文）。每回合的文件改动自动汇总成 `本轮改动：N 文件 · +a/−b`。 |
-| 🎚 | **流式阶段指示器** | assistant 流式输出时，状态行在 `✻ 思考中…` 与 `✍ 撰写回复…` 之间实时切换。 |
+| 🎚 | **流式阶段指示器** | assistant 流式输出时，状态行在 `🧠 思考中…` 与 `✍ 撰写回复…` 之间实时切换。 |
 | 🌐 | **国际化** | 界面文案中文/英文随时用 `/lang zh\|en` 切换。提示词侧保持英文。 |
 
 除 Pi 自带包外零运行时依赖。纯渲染改造：不改 Pi 本体、不发 LLM 调用、不改模型行为（`reasoning` 是引导性可选 schema 字段，执行前会被剥离）。
@@ -37,7 +37,7 @@ pi install /path/to/pi-helm
 
 1. 重启 pi。
 2. 让它做点会调用工具的事（例如“跑一下测试”）。
-3. 应该看到工具调用被折成一行摘要，开头是 `▸`，例如 `▸ 2 次调用 · ⚡×1 📖×1 · 1.1s`。
+3. 应该看到工具调用被折成一行摘要，开头是 `▸`，例如 `▸ 2 次调用 · 🔨×1 👀×1 · 1.1s`。
 
 如果看到的是 pi 原生的工具框，说明扩展没加载——试试 `/mission`（能弹出面板即意味着已加载），并查看 pi 启动时有无扩展报错。
 
@@ -75,8 +75,8 @@ Plan:
 三级展开，一次点一下：
 
 ```
- ▸ 5 次调用 · ⚡×3 📖×2 · ✗ 1 次失败 · 1.2s           ← level 0：折成一行
- ▾ 5 次调用 · ⚡×3 📖×2 · ✗ 1 次失败 · 1.2s           ← level 1：点摘要行
+ ▸ 5 次调用 · 🔨×3 👀×2 · ✗ 1 次失败 · 1.2s           ← level 0：折成一行
+ ▾ 5 次调用 · 🔨×3 👀×2 · ✗ 1 次失败 · 1.2s           ← level 1：点摘要行
  │ ✓ bash [确认哪个断言挂了] pnpm test · exit 1 · 1.8s
  │ ✓ read src/app.ts · 120 行 · 0.0s
  │ ✗ bash [验证修复] pnpm test · exit 1 · 1.2s        ← level 2：点某行
@@ -108,7 +108,7 @@ Plan:
     "defaultExpand": false,
     "pinnedBodyHeight": 14,
     "lang": "zh",
-    "style": { "marker": "▸", "icons": { "bash": "⚡" }, "spinner": ["⠋", "⠙", "⠹"] }
+    "style": { "marker": "▸", "icons": { "bash": "🔨" }, "spinner": ["⠋", "⠙", "⠹"] }
   }
 }
 ```
@@ -117,7 +117,7 @@ Plan:
 |---|---|---|
 | `enabled` | `true` | 总开关（同 `/helm off`） |
 | `hotkey` | `"ctrl+q"` | 面板热键；`/mission` 永远可用作逃生门 |
-| `workingMessage` | `true` | 工作行的流式阶段文案（`✻ 思考中…` / `✍ 撰写回复…`） |
+| `workingMessage` | `true` | 工作行的流式阶段文案（`🧠 思考中…` / `✍ 撰写回复…`） |
 | `fold` | `true` | 分组折叠本身 |
 | `neverFold` | `[]` | 保持原生渲染、不折叠的工具名 |
 | `autoRow` | `true` | 单调用组不再折成 `▸ 1 次调用`，直接显示那行（`└ ✓ bash …`） |
@@ -189,18 +189,18 @@ PI_TUI_WRITE_LOG=1 pi -e .                           # 调试原始 ANSI 流
 
 ```
 == [1] Folded group (level 0) — three tool calls between two replies ==
-▸ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+▸ 3 calls · 🔨×2 👀×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
   ← one line: counts, icons, failure count, token usage, duration
 
 == [2] Click the summary (level 1) — one row per call, │ gutter ==
-▾ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+▾ 3 calls · 🔨×2 👀×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
 └ ✓ bash [check the working tree] git status --short · 4 lines · 100ms
 └ ✓ read [see what changed] src/app.ts · 120 lines · 30ms
 └ ✗ bash [run the tests] pnpm test · FAIL test/app.test.ts · ↑1.2k ↓169 · 1.8s
   ← ✓/✗ state, reason phrase, target, outcome, usage, duration per row
 
 == [3] Click a row (level 2) — that call's full output ==
-▾ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+▾ 3 calls · 🔨×2 👀×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
 └ ✓ bash [check the working tree] git status --short · 4 lines · 100ms
 └ ✓ read [see what changed] src/app.ts · 120 lines · 30ms
 └ ✗ bash [run the tests] pnpm test · FAIL test/app.test.ts · ↑1.2k ↓169 · 1.8s
@@ -208,7 +208,7 @@ FAIL test/app.test.ts
 AssertionError: expected 1 to be 2
 
 == [4] Ctrl+O collapse-all — back to the summary line ==
-▸ 3 calls · ⚡×2 📖×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
+▸ 3 calls · 🔨×2 👀×1 · ✗ 1 failed · ↑1.2k ↓169 · 1.9s
 
 == [5] edit/write never fold — the diff is the point, and it cuts the group ==
 ✓ ✏️ edit src/app.ts · +1/−1 · ↑800 ↓40 · 300ms · 4 lines
@@ -238,7 +238,7 @@ AssertionError: expected 1 to be 2
   ← viewport capped at pinnedBodyHeight (default 14); the wheel scrolls it
 
 == [7] Anti-flicker — a call under 1s stays hidden; from 1s it surfaces with a live clock ==
-▸ 2 calls · ⚡×2 · ⠴ 2 running
+▸ 2 calls · 🔨×2 · ⠴ 2 running
 └ ⠴ bash [rebuild the bundle] pnpm build · running 1.5s
   ← only the call over 1s appears; the short one is hidden on purpose
 
@@ -251,19 +251,19 @@ AssertionError: expected 1 to be 2
   ← one call = nothing worth summarizing; the row IS the view
 
 == [10] defaultExpand — a new group opens at level 1 without a click ==
-▾ 2 calls · 🔎×1 📂×1 · 30ms
+▾ 2 calls · 🧲×1 🔦×1 · 30ms
 └ ✓ grep [find leftovers] TODO · 2 lines · 20ms
 └ ✓ ls [list the sources] src · 3 lines · 10ms
   ← ▾ header + one row per call, straight away
 
 == [11] Iconized summary — tools sharing an icon merge, distinct icons stay separate ==
-▸ 6 calls · 🤖×2 🔌×2 🌐×1 🔀×1 · 2.8s
+▸ 7 calls · 🤖×2 🔍×1 🔌×2 🌐×1 🔀×1 · 2.9s
   ← both mcp tools merge into 🔌×2; both unknowns merge into 🤖×2
   ← 🌐 and 🔀 keep their own icons (distinct icons never merge)
 
 == [12] Bilingual word tables — the same summary in zh and en ==
-  zh: ▸ 2 次调用 · ⚡×1 📖×1 · 840ms
-  en: ▸ 2 calls · ⚡×1 📖×1 · 840ms
+  zh: ▸ 2 次调用 · 🔨×1 👀×1 · 840ms
+  en: ▸ 2 calls · 🔨×1 👀×1 · 840ms
   ← same data, two vocabularies; /lang switches live
 
 Every line above came from the real formatters and state machine in src/.

@@ -693,7 +693,7 @@ export default function (pi: ExtensionAPI) {
 		const ev = e.assistantMessageEvent;
 		if (!ev?.type) return;
 		let phase: string | undefined;
-		if (ev.type.startsWith("thinking")) phase = `✻ ${t().phaseThinking}`;
+		if (ev.type.startsWith("thinking")) phase = `🧠 ${t().phaseThinking}`;
 		else if (ev.type.startsWith("text")) phase = `✍ ${t().phaseWriting}`;
 		if (phase && phase !== currentPhase) {
 			currentPhase = phase;
@@ -789,7 +789,7 @@ export default function (pi: ExtensionAPI) {
 			// no session manager / odd branch — folding just starts fresh
 		}
 		if (!ctx.hasUI) return;
-		ctx.ui.setHiddenThinkingLabel("✻ thinking…");
+		ctx.ui.setHiddenThinkingLabel("🧠 thinking…");
 		if (!reasoningInjected && !degradeNotified) {
 			degradeNotified = true;
 			ctx.ui.notify("pi-helm: tool definitions owned elsewhere — render-only mode (no reasoning head)", "warning");

@@ -58,13 +58,13 @@ export function spinnerFrame(nowMs: number, frames: readonly string[] = DEFAULT_
  * wide — the summary breakdown and panel borders assume it (a test guards it).
  */
 export const TOOL_ICONS: Record<string, string> = {
-	read: "📖",
-	bash: "⚡",
+	read: "👀",
+	bash: "🔨",
 	edit: "✏️",
 	write: "📝",
-	grep: "🔎",
-	find: "🗂",
-	ls: "📂",
+	grep: "🧲",
+	find: "🔍",
+	ls: "🔦",
 	web_search: "🌐",
 	workflow: "🔀",
 	/** Prefix rule: every `mcp__*` tool shares this icon. */

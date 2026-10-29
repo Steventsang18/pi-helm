@@ -8,7 +8,7 @@
  * styles.ts → renderers.ts → styles.ts would form a cycle.
  */
 
-/** Emoji_Presentation code points inside otherwise narrow blocks (⚡ U+26A1 …). */
+/** Emoji_Presentation code points inside otherwise narrow blocks (U+26A1 and friends). */
 const WIDE_RANGES: ReadonlyArray<readonly [number, number]> = [
 	[0x1100, 0x115f], [0x2e80, 0x303e], [0x3041, 0x33ff], [0x3400, 0x4dbf],
 	[0x4e00, 0x9fff], [0xa000, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff],

@@ -198,8 +198,9 @@ rule("[11] Iconized summary — tools sharing an icon merge, distinct icons stay
 		{ id: "i2", tool: "workflow", args: { name: "audit" }, result: text("done"), durationMs: 1200 },
 		{ id: "i3", tool: "mcp__github__search", args: { query: "x" }, result: text("2 hits"), durationMs: 300 },
 		{ id: "i4", tool: "mcp__docs__read", args: { url: "y" }, result: text("ok"), durationMs: 200 },
-		{ id: "i5", tool: "my_custom_tool", args: { thing: 1 }, result: text("ok"), durationMs: 100 },
-		{ id: "i6", tool: "another_unknown", args: { thing: 2 }, result: text("ok"), durationMs: 100 },
+		{ id: "i5", tool: "find", args: { pattern: "**/*.ts", reasoning: "list the sources" }, result: text("a.ts\nb.ts"), durationMs: 80 },
+		{ id: "i6", tool: "my_custom_tool", args: { thing: 1 }, result: text("ok"), durationMs: 100 },
+		{ id: "i7", tool: "another_unknown", args: { thing: 2 }, result: text("ok"), durationMs: 100 },
 	]).repaint();
 	out("← both mcp tools merge into 🔌×2; both unknowns merge into 🤖×2");
 	out("← 🌐 and 🔀 keep their own icons (distinct icons never merge)");

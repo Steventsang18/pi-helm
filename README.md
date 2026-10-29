@@ -256,9 +256,10 @@ AssertionError: expected 1 to be 2
 └ ✓ ls [list the sources] src · 3 lines · 10ms
   ← ▾ header + one row per call, straight away
 
-== [11] Iconized summary — known tools get icons, MCP shares one, unknowns fall back ==
-▸ 4 calls · 🔌×1 🤖×1 🌐×1 🔀×1 · 2.5s
-  ← icons come from the icon table (mcp prefix → 🔌, unknown → 🤖)
+== [11] Iconized summary — tools sharing an icon merge, distinct icons stay separate ==
+▸ 6 calls · 🤖×2 🔌×2 🌐×1 🔀×1 · 2.8s
+  ← both mcp tools merge into 🔌×2; both unknowns merge into 🤖×2
+  ← 🌐 and 🔀 keep their own icons (distinct icons never merge)
 
 == [12] Bilingual word tables — the same summary in zh and en ==
   zh: (Chinese vocabulary — omitted here to keep this file ASCII; run the script to see it)

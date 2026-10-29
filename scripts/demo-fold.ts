@@ -190,16 +190,19 @@ rule("[10] defaultExpand — a new group opens at level 1 without a click");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-rule("[11] Iconized summary — known tools get icons, MCP shares one, unknowns fall back");
+rule("[11] Iconized summary — tools sharing an icon merge, distinct icons stay separate");
 {
 	const r = rig({ autoRow: false });
 	build(r, [
 		{ id: "i1", tool: "web_search", args: { query: "pi tui" }, result: text("3 results"), durationMs: 900 },
 		{ id: "i2", tool: "workflow", args: { name: "audit" }, result: text("done"), durationMs: 1200 },
 		{ id: "i3", tool: "mcp__github__search", args: { query: "x" }, result: text("2 hits"), durationMs: 300 },
+		{ id: "i4", tool: "mcp__docs__read", args: { url: "y" }, result: text("ok"), durationMs: 200 },
 		{ id: "i5", tool: "my_custom_tool", args: { thing: 1 }, result: text("ok"), durationMs: 100 },
+		{ id: "i6", tool: "another_unknown", args: { thing: 2 }, result: text("ok"), durationMs: 100 },
 	]).repaint();
-	out("← icons come from the icon table (mcp prefix → 🔌, unknown → 🤖)");
+	out("← both mcp tools merge into 🔌×2; both unknowns merge into 🤖×2");
+	out("← 🌐 and 🔀 keep their own icons (distinct icons never merge)");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

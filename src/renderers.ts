@@ -71,8 +71,19 @@ export function fmtSummaryLine(
 	const head = `${marker} ${theme.bold(words().calls(summary.count))}`;
 	const parts = [head];
 	if (summary.breakdown.length > 0) {
-		// C: icon first — tool type at a glance; unknown tools keep their name
-		parts.push(theme.fg("dim", summary.breakdown.map((e) => `${iconFor(e.name, style.icons)}×${e.count}`).join(" ")));
+		// Icon first — tool type at a glance. Several tool names can resolve to the
+		// same icon (every `mcp__*` tool shares one, all unknown tools share the
+		// fallback), so merge by icon keeping first-appearance order; otherwise
+		// the line reads `🔌×1 🔌×1` instead of `🔌×2`. The L1 breakdown stays per
+		// tool name — this is purely how the line is drawn.
+		const merged: { icon: string; count: number }[] = [];
+		for (const entry of summary.breakdown) {
+			const icon = iconFor(entry.name, style.icons);
+			const seen = merged.find((m) => m.icon === icon);
+			if (seen) seen.count += entry.count;
+			else merged.push({ icon, count: entry.count });
+		}
+		parts.push(theme.fg("dim", merged.map((m) => `${m.icon}×${m.count}`).join(" ")));
 	}
 	if (summary.failed > 0) parts.push(theme.fg("error", `✗ ${words().failed(summary.failed)}`));
 	if (summary.running > 0) parts.push(theme.fg("warning", `${frame ?? spinnerFrame(Date.now(), style.spinner)} ${words().running(summary.running)}`));

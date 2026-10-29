@@ -326,6 +326,39 @@ test("iconFor: DIY overrides for mcp and the fallback key take effect", async ()
 	assert.equal(iconFor("bash", diy.icons), "⚡", "untouched keys keep defaults");
 });
 
+// ── summary breakdown merges by icon (display layer only) ────────────────────
+// Two tool names sharing one icon must read as one entry: `🔌×2`, not
+// `🔌×1 🔌×1`. First-appearance order is preserved; distinct icons never merge.
+function breakdownOf(spec: Array<[string, number]>): GroupSummary {
+	return {
+		count: spec.reduce((n, [, c]) => n + c, 0),
+		breakdown: spec.map(([name, count]) => ({ name, count })),
+		failed: 0,
+		running: 0,
+		durationMs: 0,
+	};
+}
+
+test("summary breakdown: two different MCP tools merge into 🔌×2", () => {
+	assert.equal(fmtSummaryLine(breakdownOf([["mcp__github__search", 1], ["mcp__docs__read", 1]]), 0, th), "▸ 2 calls · 🔌×2");
+});
+
+test("summary breakdown: two different unknown tools merge into 🤖×2", () => {
+	assert.equal(fmtSummaryLine(breakdownOf([["alpha_tool", 1], ["beta_tool", 1]]), 0, th), "▸ 2 calls · 🤖×2");
+});
+
+test("summary breakdown: distinct icons stay separate, in input order", () => {
+	assert.equal(fmtSummaryLine(breakdownOf([["bash", 2], ["read", 1]]), 0, th), "▸ 3 calls · ⚡×2 📖×1");
+});
+
+test("summary breakdown: mixed counts of one icon add up (🔌×3)", () => {
+	assert.equal(fmtSummaryLine(breakdownOf([["mcp__a", 2], ["mcp__b", 1]]), 0, th), "▸ 3 calls · 🔌×3");
+});
+
+test("summary breakdown: first appearance wins the slot (read before bash)", () => {
+	assert.equal(fmtSummaryLine(breakdownOf([["read", 1], ["bash", 1]]), 0, th), "▸ 2 calls · 📖×1 ⚡×1");
+});
+
 test("all default icons are exactly two cells (border/alignment guard)", async () => {
 	const { TOOL_ICONS } = await import("../src/styles.ts");
 	const { stringWidth } = await import("../src/width.ts");

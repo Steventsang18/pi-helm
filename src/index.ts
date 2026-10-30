@@ -32,6 +32,7 @@ import { homedir } from "os";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GroupRegistry, buildSummary, classifyAssistant, rebuildFromEntries, type EntryLike, type ToolCallRecord } from "./groups.ts";
+import { HUD_WIDGET_KEY, HudComponent, type HudHit, type HudModel, type HudWords } from "./hud.ts";
 import { createToolResolver, disposeAllRenderers, fmtSummaryLine, type ThemeLike } from "./renderers.ts";
 import { setLang } from "./strings.ts";
 import { DEFAULT_STYLE, mergeStyle, panelRuleDashes, spinnerFrame, SPINNER_FRAME_MS, type Style } from "./styles.ts";
@@ -101,6 +102,36 @@ const T = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// HUD words (the 3 below-editor lines; separate from the panel's table because
+// the HUD needs short lowercase labels, the panel uses section headings)
+// ---------------------------------------------------------------------------
+
+const HUD_WORDS: { zh: HudWords; en: HudWords } = {
+	zh: {
+		plan: "计划",
+		noPlan: "无计划",
+		running: "运行中",
+		idle: "空闲",
+		errors: "错误",
+		points: "要点",
+		turn: "本轮",
+		expand: "展开",
+		allDone: "全部完成",
+	},
+	en: {
+		plan: "plan",
+		noPlan: "no plan",
+		running: "running",
+		idle: "idle",
+		errors: "errors",
+		points: "points",
+		turn: "this turn",
+		expand: "expand",
+		allDone: "all done",
+	},
+};
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 
@@ -141,12 +172,16 @@ function parsePlanSteps(text: string): string[] {
 	return steps;
 }
 
+/** The part of a tool call worth showing: its command / path / pattern. */
+function taskDetail(args: any): string {
+	if (typeof args?.command === "string") return args.command.replace(/\s+/g, " ").trim();
+	if (typeof args?.path === "string") return shortenPath(args.path);
+	if (typeof args?.pattern === "string") return String(args.pattern);
+	return "";
+}
+
 function taskLabel(toolName: string, args: any): string {
-	let detail = "";
-	if (typeof args?.command === "string") detail = args.command.replace(/\s+/g, " ").trim();
-	else if (typeof args?.path === "string") detail = shortenPath(args.path);
-	else if (typeof args?.pattern === "string") detail = String(args.pattern);
-	return truncateToWidth(`${toolName}  ${detail}`, 60);
+	return truncateToWidth(`${toolName}  ${taskDetail(args)}`, 60);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +196,9 @@ interface PlanStep {
 interface TaskRow {
 	id: string;
 	label: string;
+	/** Kept apart from `label` so the HUD can style the tool name and detail differently. */
+	toolName: string;
+	detail: string;
 	startedAt: number;
 	nested: number;
 }
@@ -182,10 +220,13 @@ let lang: Lang = "zh";
 const t = () => T[lang];
 
 let footerTui: { requestRender(): void } | undefined;
+/** Live HUD widget, when one is mounted (TUI + `hudEnabled`). */
+let hudComp: HudComponent | undefined;
 
 function refresh() {
 	state.version++;
 	footerTui?.requestRender();
+	hudComp?.notify();
 }
 
 function pushPoint(kind: KeyPoint["kind"], text: string) {
@@ -199,6 +240,12 @@ function appendPill(pi: ExtensionAPI, kind: KeyPoint["kind"], text: string) {
 
 function paintStatus(ctx: any) {
 	if (!ctx.hasUI) return;
+	// With the HUD mounted the same mission numbers already sit under the
+	// editor; two copies would just add noise. Non-TUI keeps the status line.
+	if (hudComp) {
+		ctx.ui.setStatus(STATUS_KEY, undefined);
+		return;
+	}
 	const theme: Theme = ctx.ui.theme;
 	const total = state.plan.length;
 	const done = state.plan.filter((s) => s.done).length;
@@ -275,6 +322,11 @@ interface HelmConfig {
 	lang: Lang;
 	/** Built-in style + settings.json DIY overrides (contract: same namespace). */
 	style: Style;
+	/**
+	 * Persistent 3-line HUD under the editor (belowEditor widget). Off by
+	 * default: with it off the interface is byte-for-byte what it was before.
+	 */
+	hudEnabled: boolean;
 }
 
 const cfg: HelmConfig = {
@@ -290,6 +342,7 @@ const cfg: HelmConfig = {
 	pinnedBodyHeight: 14,
 	lang: "zh",
 	style: DEFAULT_STYLE,
+	hudEnabled: false,
 };
 const registry = new GroupRegistry();
 let reasoningInjected = true;
@@ -314,6 +367,7 @@ function applyConfig(raw: any) {
 		cfg.pinnedBodyHeight = Math.max(4, Math.min(40, Math.floor(raw.pinnedBodyHeight)));
 	}
 	if (raw.lang === "zh" || raw.lang === "en") cfg.lang = raw.lang;
+	if (typeof raw.hudEnabled === "boolean") cfg.hudEnabled = raw.hudEnabled;
 	if (raw.style && typeof raw.style === "object") cfg.style = mergeStyle(raw.style);
 }
 
@@ -387,7 +441,11 @@ class MissionOverlay {
 		private tui: { requestRender(): void },
 		private theme: Theme,
 		private done: () => void,
+		private focus?: { taskId?: string; sel?: number },
 	) {
+		// Opening the panel *on* a HUD hit (a key point, a running task) starts
+		// with that row already selected instead of always at the top.
+		this.sel = Math.min(Math.max(0, focus?.sel ?? 0), Math.max(0, state.points.length - 1));
 		// Spinner-speed refresh, but only while something actually runs: an idle
 		// panel needs no repaint (elapsed seconds only tick for running tasks).
 		this.timer = setInterval(() => {
@@ -464,8 +522,9 @@ class MissionOverlay {
 			for (const task of running) {
 				const secs = Math.round((Date.now() - task.startedAt) / 1000);
 				const extra = task.nested > 0 ? th.fg("dim", ` ·${task.nested}↓`) : "";
+				const body = `${th.fg("warning", frame)} ${th.fg("toolOutput", truncateToWidth(task.label, inner - 14))} ${th.fg("dim", `${secs}s`)}${extra}`;
 				lines.push(
-					`│   ${th.fg("warning", frame)} ${th.fg("toolOutput", truncateToWidth(task.label, inner - 14))} ${th.fg("dim", `${secs}s`)}${extra}`,
+					task.id === this.focus?.taskId ? `│ ${th.style(` ${body} `, { bg: "customMessageBg" })}` : `│   ${body}`,
 				);
 			}
 		}
@@ -559,10 +618,10 @@ export default function (pi: ExtensionAPI) {
 	pi.registerEntryRenderer<{ text: string; ts: number; kind: KeyPoint["kind"] }>(PILL_TYPE_LEGACY, pillRenderer);
 
 	// ===== L1: overlay dashboard =============================================
-	const openOverlay = async (ctx: any) => {
+	const openOverlay = async (ctx: any, focus?: { taskId?: string; sel?: number }) => {
 		if (!ctx.hasUI) return;
 		await ctx.ui.custom<boolean>(
-			(tui: any, theme: Theme, _kb: any, done: (r: boolean) => void) => new MissionOverlay(tui, theme, () => done(true)),
+			(tui: any, theme: Theme, _kb: any, done: (r: boolean) => void) => new MissionOverlay(tui, theme, () => done(true), focus),
 			{
 				overlay: true,
 				overlayOptions: {
@@ -573,6 +632,63 @@ export default function (pi: ExtensionAPI) {
 				},
 			},
 		);
+	};
+
+	// ===== L2: HUD under the editor (belowEditor widget) ====================
+	//
+	// Mission info pi's own footer cannot know (plan progress / running tasks /
+	// errors / turn diff). The built-in footer keeps every one of its fields —
+	// this is an addition below it, never a replacement.
+	const hudWords = (): HudWords => HUD_WORDS[lang];
+
+	const hudModel = (): HudModel => ({
+		plan: state.plan,
+		tasks: [...state.tasks.values()].map((row) => ({
+			id: row.id,
+			toolName: row.toolName,
+			detail: row.detail,
+			startedAtMs: row.startedAt,
+		})),
+		errors: state.points.filter((p) => p.kind === "error").length,
+		points: state.points.length,
+		edits: {
+			adds: turnEdits.reduce((n, x) => n + x.adds, 0),
+			dels: turnEdits.reduce((n, x) => n + x.dels, 0),
+		},
+	});
+
+	/** Index of the newest error key point (where a `✗` click sends the panel). */
+	const lastErrorIndex = () => {
+		for (let i = state.points.length - 1; i >= 0; i--) if (state.points[i].kind === "error") return i;
+		return 0;
+	};
+
+	const mountHud = (ctx: any) => {
+		ctx.ui.setWidget(
+			HUD_WIDGET_KEY,
+			(tui: any, theme: Theme) => {
+				const comp = new HudComponent(tui, theme, hudModel, hudWords, () => cfg.style, (hit: HudHit) => {
+					if (hit.kind === "task") void openOverlay(ctx, { taskId: hit.taskId });
+					else if (hit.kind === "error") void openOverlay(ctx, { sel: lastErrorIndex() });
+					else void openOverlay(ctx);
+				});
+				hudComp = comp;
+				return comp;
+			},
+			{ placement: "belowEditor" },
+		);
+	};
+
+	const clearHud = (ctx: any) => {
+		hudComp = undefined;
+		// Only the interactive TUI has widgets; RPC/JSON/print would throw.
+		if (!ctx?.hasUI || ctx.mode !== "tui") return;
+		ctx.ui.setWidget(HUD_WIDGET_KEY, undefined);
+	};
+
+	const syncHud = (ctx: any) => {
+		if (cfg.enabled && cfg.hudEnabled && ctx.hasUI && ctx.mode === "tui") mountHud(ctx);
+		else clearHud(ctx);
 	};
 
 	// macOS key convention: ⌃Q works everywhere; ⌥G (alias) fires on terminals
@@ -607,6 +723,8 @@ export default function (pi: ExtensionAPI) {
 			if (v === "off") cfg.enabled = false;
 			else if (v === "on") cfg.enabled = true;
 			else if (v === "toggle") cfg.enabled = !cfg.enabled;
+			// The kill switch takes the HUD with it, no restart needed.
+			syncHud(ctx);
 			ctx.ui.notify(`pi-helm: ${cfg.enabled ? "on" : "off"}${v ? "" : " (usage: /helm off|on|toggle)"}`, "info");
 			paintStatus(ctx);
 		},
@@ -628,6 +746,8 @@ export default function (pi: ExtensionAPI) {
 			state.tasks.set(e.toolCallId, {
 				id: e.toolCallId,
 				label: taskLabel(e.toolName, e.args),
+				toolName: e.toolName,
+				detail: taskDetail(e.args),
 				startedAt: Date.now(),
 				nested: 0,
 			});
@@ -794,10 +914,19 @@ export default function (pi: ExtensionAPI) {
 			degradeNotified = true;
 			ctx.ui.notify("pi-helm: tool definitions owned elsewhere — render-only mode (no reasoning head)", "warning");
 		}
+		// HUD: mounted only in the interactive TUI (RPC/JSON/print have no
+		// widgets); `hudEnabled` off means the interface is left untouched.
+		syncHud(ctx);
 		paintStatus(ctx);
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", (_e, ctx) => {
+		// Idempotent: a second shutdown (or a session without widgets) must not throw.
+		try {
+			clearHud(ctx);
+		} catch {
+			// UI already torn down — nothing to release
+		}
 		disposeAllRenderers();
 		pathByCallId.clear();
 	});
@@ -847,8 +976,8 @@ export default function (pi: ExtensionAPI) {
 				{ text: "Write documentation", done: false },
 			];
 			state.tasks.clear();
-			state.tasks.set("fake-1", { id: "fake-1", label: "bash  npm test", startedAt: Date.now(), nested: 2 });
-			state.tasks.set("fake-2", { id: "fake-2", label: "agent  scout", startedAt: Date.now(), nested: 0 });
+			state.tasks.set("fake-1", { id: "fake-1", label: "bash  npm test", toolName: "bash", detail: "npm test", startedAt: Date.now(), nested: 2 });
+			state.tasks.set("fake-2", { id: "fake-2", label: "agent  scout", toolName: "agent", detail: "scout", startedAt: Date.now(), nested: 0 });
 			state.points = [
 				{ kind: "milestone", text: "Data model finished", ts: Date.now() - 120_000 },
 				{ kind: "error", text: "bash: Cannot find module 'zod'", ts: Date.now() },

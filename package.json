@@ -1,6 +1,6 @@
 {
   "name": "pi-helm",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Mission control for your Pi session: reason-first compact tool cards, live task dashboard, plan progress and a key-point feed - so the terminal stays readable for everyone.",
   "keywords": [
     "pi-package",

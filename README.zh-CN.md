@@ -20,6 +20,7 @@
 | 🔑 | **要点流** | 工具错误和里程碑被确定性捕获，盖成药丸卡嵌入对话流（经 `appendEntry`，不进 LLM 上下文）。每回合的文件改动自动汇总成 `本轮改动：N 文件 · +a/−b`。 |
 | 🎚 | **流式阶段指示器** | assistant 流式输出时，状态行在 `🧠 思考中…` 与 `✍ 撰写回复…` 之间实时切换。 |
 | 🌐 | **国际化** | 界面文案中文/英文随时用 `/lang zh\|en` 切换。提示词侧保持英文。 |
+| 🛰 | **常驻 HUD** | 编辑器下方可选 3 行面板：计划进度、运行中任务（带转动的 spinner）、错误/要点计数。默认关闭（`hudEnabled`）。点 `⌃Q` 提示可打开指挥台面板。 |
 
 除 Pi 自带包外零运行时依赖。纯渲染改造：不改 Pi 本体、不发 LLM 调用、不改模型行为（`reasoning` 是引导性可选 schema 字段，执行前会被剥离）。
 
@@ -107,6 +108,7 @@ Plan:
     "autoRow": true,
     "defaultExpand": false,
     "pinnedBodyHeight": 14,
+    "hudEnabled": true,
     "lang": "zh",
     "style": { "marker": "▸", "icons": { "bash": "🔨" }, "spinner": ["⠋", "⠙", "⠹"] }
   }
@@ -123,10 +125,20 @@ Plan:
 | `autoRow` | `true` | 单调用组不再折成 `▸ 1 次调用`，直接显示那行（`└ ✓ bash …`） |
 | `defaultExpand` | `false` | 新分组默认展开（`▾` 头 + 每成员一行明细）；默认仍是折叠，点头部才展开 |
 | `pinnedBodyHeight` | `14` | `edit`/`write` 滚动框的视口高度（4–40）；短正文保持自然高度，只有长正文才滚动 |
+| `hudEnabled` | `false` | 编辑器下方可选的 3 行 HUD：计划进度 · 运行中任务（转动的 spinner）· 错误/要点计数。点 `⌃Q` 提示可打开面板。 |
 | `lang` | `"zh"` | 界面语言默认值；会话内用 `/lang zh\|en` 切换 |
 | `style` | `{}` | DIY 显示层：`marker` / `openMarker` / `rowGutter` / `sep` / `icons` / `spinner` 逐项覆盖内置风格，未知或空值不生效；颜色仍走 pi 语义 token，深浅主题都正常。`spinner` 是帧数组（默认盲文 `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`，每帧必须单宽，180ms 一帧）。`icons` 有两个特殊键：`mcp`（前缀匹配所有 `mcp__*`）与 `"*"`（兜底，默认 🤖）。图标必须 2 显示格宽，否则摘要行与面板边框会歪 |
 
 > **限制**：`hotkey` 与 `enabled`（reasoning 注入）是**注册期**配置，只认**全局** `settings.json`——pi 1.3.0 在扩展加载期不提供 `getSettings()`，本扩展只能直读全局文件。project settings 里覆盖这两项无效。其余键在 `session_start` 经官方 API 重读，project 覆盖正常合并。
+>
+> **HUD 只做加法，不替代 footer。** pi 内置 footer 的每个字段——`↑↓` token 数、`$` 费用、上下文占比、缓存命中率、git 分支——全部留在原位；本扩展**从不调用 `setFooter`**，HUD 只是在它上面多加 3 行，且 HUD 开启时 pi-helm 自己的 `setStatus` 行会让位，避免同一批数字出现两次。
+>
+> ```text
+> ⛵ 计划 2/5 · Implement the API layer
+> ▸ 运行中 2 · ⠋ bash pnpm test 12s ├ ⠋ read src/app.ts 3s
+> ✗ 错误 0 · ✦ 要点 3 · 本轮 +24/−8 · ⌃Q 面板展开
+> ~/proj (main) · mysession · ↑12k ↓3.4k · R36k W1.2k · CH87.3% · $0.123 · 45.2%/200k   ← pi 内置 footer，原样不动
+> ```
 >
 > **每行的“在做什么”**：模型传了 `reasoning` 就显示它（`[确认断言]`）；没传则由内置工具描述目录兜底（`[运行命令]`，随 `lang` 切换）。描述是确定性生成的——本项目零 LLM 调用，这是产品红线。
 

@@ -20,6 +20,7 @@
 | 🔑 | **Key-point feed** | Tool errors and milestones are captured deterministically and stamped as pill cards in the transcript (kept out of the LLM context via `appendEntry`). A turn's file changes are auto-summarized as `Turn changes: N files · +a/-b`. |
 | 🎚 | **Streaming phase indicator** | The status line live-switches between `🧠 thinking…` and `✍ writing…` while the assistant streams. |
 | 🌐 | **i18n** | Interface strings in Chinese or English, switch any time with `/lang zh|en`. Prompt-side text stays English. |
+| 🛰 | **Persistent HUD** | An opt-in 3-line panel under the editor shows plan progress, running tasks with a live spinner, and error / key-point counts. Off by default (`hudEnabled`). Click the `⌃Q` hint to open the mission panel. |
 
 Zero runtime dependencies beyond Pi's own packages. Pure rendering: no Pi source changes, no LLM calls, no model-behavior changes (the `reasoning` param is a guided, optional schema field stripped before execution).
 
@@ -107,6 +108,7 @@ Three levels, one click at a time:
     "autoRow": true,
     "defaultExpand": false,
     "pinnedBodyHeight": 14,
+    "hudEnabled": true,
     "lang": "en",
     "style": { "marker": "▸", "icons": { "bash": "🔨" }, "spinner": ["⠋", "⠙", "⠹"] }
   }
@@ -123,10 +125,20 @@ Three levels, one click at a time:
 | `autoRow` | `true` | A one-call group skips the `▸ 1 call` wrapper and shows its row directly (`└ ✓ bash …`) |
 | `defaultExpand` | `false` | New groups open expanded (`▾` header + one row per call); by default they stay folded until the header is clicked |
 | `pinnedBodyHeight` | `14` | Viewport height (4–40) for the edit/write scroll box; short bodies stay natural-height, only longer ones scroll |
+| `hudEnabled` | `false` | Opt-in 3-line HUD below the editor: plan progress · running tasks (live spinner) · error/key-point counts. Click the ⌃Q hint to open the panel. |
 | `lang` | `"en"` | Interface language default; flip per session with `/lang zh\|en` |
 | `style` | `{}` | DIY display layer: override `marker` / `openMarker` / `rowGutter` / `sep` / `icons` / `spinner` item by item; unknown or empty values are ignored; colors stay pi semantic theme tokens so dark and light themes both work. `spinner` is a frame array (default braille `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`; every frame must be single-width; 180 ms per frame). `icons` has two special keys: `mcp` (prefix-matches every `mcp__*`) and `"*"` (fallback, default 🤖). Icons must be two display cells wide, or summary rows and panel borders bend |
 
 > **Limits.** `hotkey` and `enabled` (reasoning-schema injection) are registration-time settings, so they only honor the **global** `settings.json`: pi 1.3.0 does not expose `getSettings()` while an extension loads, and the extension reads the global file directly. Project-level overrides of those two keys are ignored. Every other key is re-read through the official API on `session_start`, where project overrides merge normally.
+>
+> **The HUD is an addition, not a replacement.** Pi's built-in footer keeps every one of its fields — `↑↓` token counts, `$` cost, context %, cache hit rate, git branch — exactly where it was. `setFooter` is never installed; the HUD is only three extra lines above it, and while it is on, pi-helm's own `setStatus` line steps aside so the numbers do not show twice.
+>
+> ```text
+> ⛵ Plan 2/5 · Implement the API layer
+> ▸ Running 2 · ⠋ bash pnpm test 12s ├ ⠋ read src/app.ts 3s
+> ✗ Errors 0 · ✦ Points 3 · Turn +24/−8 · ⌃Q open panel
+> ~/proj (main) · mysession · ↑12k ↓3.4k · R36k W1.2k · CH87.3% · $0.123 · 45.2%/200k   ← pi's own footer, unchanged
+> ```
 >
 > **Per-row "what did this call do?"** The model's `reasoning` wins (`[check failures]`); when absent, the built-in tool catalog fills the slot (`run command`, following `lang`). Descriptions are generated deterministically — this project makes zero LLM calls, and that is a product red line.
 

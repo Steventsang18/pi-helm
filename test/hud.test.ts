@@ -33,7 +33,7 @@ const words: HudWords = {
 	errors: "错误",
 	points: "要点",
 	turn: "本轮",
-	expand: "展开",
+	openPanel: "面板展开",
 	allDone: "全部完成",
 };
 
@@ -122,15 +122,21 @@ test("hud line 2: the spinner advances with the shared clock", () => {
 // line 3 — errors / points / turn diff + hint
 // ─────────────────────────────────────────────────────────────────────────────
 
-test("hud line 3: counts, turn diff and the right-aligned hint", () => {
-	const line = lines(busy, 80)[2];
-	assert.match(line, /^✗ 错误 1 · ✦ 要点 3 · 本轮 \+24\/−8 +⌃Q 展开$/);
-	assert.equal(stringWidth(line), 80, "the hint lands flush with the right edge");
+test("hud line 3: counts, turn diff and the inline panel hint", () => {
+	assert.equal(lines(busy, 80)[2], "✗ 错误 1 · ✦ 要点 3 · 本轮 +24/−8 · ⌃Q 面板展开");
+});
+
+test("hud line 3: the hint rides on the row, not flush against the right edge", () => {
+	const line = lines(busy, 100)[2];
+	assert.ok(!/\s{2,}/.test(line), "no gap padding leftovers");
+	assert.ok(stringWidth(line) < 100, "the line no longer fills the width");
+	assert.ok(line.endsWith("· ⌃Q 面板展开"), "hint is the last segment, joined by the shared separator");
 });
 
 test("hud line 3: zeroes still render (no layout jump between states)", () => {
-	assert.match(lines(idle, 80)[2], /^✗ 错误 0 · ✦ 要点 0 · 本轮 \+0\/−0 +⌃Q 展开$/);
+	assert.equal(lines(idle, 80)[2], "✗ 错误 0 · ✦ 要点 0 · 本轮 +0/−0 · ⌃Q 面板展开");
 });
+
 
 test("hud line 3: a non-zero error count uses the error token", () => {
 	const named: HudTheme = { fg: (color, text) => `<${color}>${text}`, bold: (text) => text };
@@ -176,9 +182,33 @@ test("hud narrow width: nothing spills, the hint and the turn diff go first", ()
 	assert.ok(narrow[2].includes("错误"), "errors always survive");
 });
 
-test("hud 80 cells: the hint is kept (a normal terminal has room)", () => {
-	assert.ok(lines(busy, 80)[2].includes("⌃Q 展开"));
+test("hud 60 cells: the whole stats row still fits, hint included", () => {
+	assert.equal(lines(busy, 60)[2], "✗ 错误 1 · ✦ 要点 3 · 本轮 +24/−8 · ⌃Q 面板展开");
 });
+
+test("hud 80 cells: the hint is kept and stays clickable", () => {
+	const view = renderHud(busy, words, plain, 80, NOW, DEFAULT_STYLE);
+	assert.ok(view.lines[2].includes("⌃Q 面板展开"));
+	const tail = view.spans[2][view.spans[2].length - 1];
+	assert.equal(tail.hit.kind, "panel");
+	assert.equal(tail.x1, stringWidth(view.lines[2]));
+});
+
+test("hud narrow width: a dropped block never leaves a dangling separator", () => {
+	for (let width = 1; width <= 100; width++) {
+		const view = renderHud(LONG, words, plain, width, NOW, DEFAULT_STYLE);
+		for (const line of view.lines) {
+			const trimmed = line.trimEnd();
+			assert.ok(stringWidth(line) <= width, `width ${width} overflowed`);
+			assert.ok(!trimmed.endsWith("·"), `width ${width} left a dangling separator: ${JSON.stringify(line)}`);
+			assert.ok(!/[\uD800-\uDBFF]$/.test(trimmed), `width ${width} cut an emoji in half: ${JSON.stringify(line)}`);
+			// Below ~8 cells a 2-cell glyph cannot be drawn at all — blank is honest.
+			if (width >= 8) assert.ok(trimmed !== "", `width ${width} produced a blank line`);
+		}
+		for (const row of view.spans) for (const span of row) assert.ok(span.x1 > span.x0);
+	}
+});
+
 
 test("hud wide characters: the sailing glyph is two cells", () => {
 	assert.equal(stringWidth(HUD_ICONS.plan), 2);
@@ -212,8 +242,10 @@ test("hits: the error count and the ⌃Q hint are separate targets on one line",
 	const kinds = new Set(view.spans[2].map((s) => s.hit.kind));
 	assert.ok(kinds.has("error"));
 	assert.ok(kinds.has("panel"));
+	// The hint is a whole target sitting on the tail of the row.
 	const last = view.spans[2][view.spans[2].length - 1];
-	assert.ok(last.x1 <= 100);
+	assert.equal(last.hit.kind, "panel");
+	assert.equal(last.x1, stringWidth(view.lines[2]));
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

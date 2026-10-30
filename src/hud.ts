@@ -73,7 +73,8 @@ export interface HudWords {
 	errors: string;
 	points: string;
 	turn: string;
-	expand: string;
+	/** The line-3 hint, e.g. `⌃Q 面板展开` — it names the *panel*, not "expand". */
+	openPanel: string;
 	allDone: string;
 }
 
@@ -105,6 +106,9 @@ export const HUD_ICONS = {
 /** At most this many running tasks share line 2; the rest become `+N`. */
 const MAX_TASK_ITEMS = 2;
 
+/** Optional-block tiers: everything on line 2 past the first task goes first. */
+const DROP_EXTRA_TASK = 1;
+
 // ---------------------------------------------------------------------------
 // segments → cells
 // ---------------------------------------------------------------------------
@@ -117,8 +121,12 @@ interface Seg {
 	hit?: HudHit;
 	/** Shortened to `…` when the line is too wide (the last such seg wins). */
 	flex?: boolean;
-	/** Dropped as one trailing run when the line does not fit. */
-	drop?: boolean;
+	/**
+	 * Optional block: dropped whole when the line does not fit. Higher tiers go
+	 * first, so a hint made of `·` + text always leaves together with its
+	 * separator (a line never ends on a dangling `·`).
+	 */
+	drop?: number;
 	/** Live spinner frame: same cell width every frame, substituted at paint. */
 	spin?: boolean;
 }
@@ -153,10 +161,17 @@ function layoutLine(segs: readonly Seg[], width: number, spin: string): Placed[]
 	const measure = (seg: Seg) => stringWidth(textOf(seg, spin));
 	const total = () => work.reduce((n, seg) => n + measure(seg), 0);
 
-	while (total() > width && work.length > 0 && work[work.length - 1].drop) {
-		let start = work.length - 1;
-		while (start > 0 && work[start - 1].drop) start--;
-		work = work.slice(0, start);
+	// Drop optional trailing blocks, most optional first. A block leaves whole
+	// (`·` + text together), so nothing half-removed is left on screen.
+	while (total() > width) {
+		const end = work.length - 1;
+		if (end < 0 || work[end].drop === undefined) break;
+		let start = end;
+		while (start > 0 && work[start - 1].drop !== undefined) start--;
+		const tier = Math.max(...work.slice(start).map((seg) => seg.drop ?? 0));
+		let blockStart = end;
+		while (blockStart > start && work[blockStart - 1].drop === tier) blockStart--;
+		work = work.slice(0, blockStart);
 	}
 
 	if (total() > width) {
@@ -194,6 +209,17 @@ function layoutLine(segs: readonly Seg[], width: number, spin: string): Placed[]
 function paintSeg(theme: HudTheme, text: string, seg: Seg): string {
 	const colored = seg.color ? theme.fg(seg.color, text) : text;
 	return seg.bold ? theme.bold(colored) : colored;
+}
+
+/**
+ * Pure: separators belong to the block before them, never to the end of a row.
+ * After a hard clip the tail can be a lone `·` — drop it instead of showing it.
+ */
+function trimTailSeparators(placed: Placed[]): Placed[] {
+	const isSeparator = (seg: Seg) => seg.hit === undefined && /^[\s·]*$/.test(seg.text);
+	let end = placed.length;
+	while (end > 0 && isSeparator(placed[end - 1].seg)) end--;
+	return end === placed.length ? placed : placed.slice(0, end);
 }
 
 function spansOf(placed: readonly Placed[]): HudHitSpan[] {
@@ -274,16 +300,20 @@ function tasksSegs(model: HudModel, words: HudWords, style: Style, nowMs: number
 			return;
 		}
 		// Second task + its separator go as one droppable run on narrow terminals.
-		segs.push({ text: " ├ ", color: "dim", drop: true });
-		for (const seg of item) segs.push({ ...seg, drop: true });
+		segs.push({ text: " ├ ", color: "dim", drop: DROP_EXTRA_TASK });
+		for (const seg of item) segs.push({ ...seg, drop: DROP_EXTRA_TASK });
 	});
 	if (model.tasks.length > MAX_TASK_ITEMS) {
-		segs.push({ text: ` +${model.tasks.length - MAX_TASK_ITEMS}`, color: "dim", drop: true });
+		segs.push({ text: ` +${model.tasks.length - MAX_TASK_ITEMS}`, color: "dim", drop: DROP_EXTRA_TASK });
 	}
 	return segs;
 }
 
-/** Line 3 — `✗ 错误 0 · ✦ 要点 3 · 本轮 +24/−8` (+ right-aligned `⌃Q 展开`). */
+/** Optional-block tiers: the panel hint is the first thing to go, then the diff. */
+const DROP_DIFF = 1;
+const DROP_HINT = 2;
+
+/** Line 3 — `✗ 错误 0 · ✦ 要点 3 · 本轮 +24/−8 · ⌃Q 面板展开`. */
 function statsSegs(model: HudModel, words: HudWords, style: Style): Seg[] {
 	return [
 		{ text: HUD_ICONS.error, color: "error", hit: ERROR_HIT },
@@ -298,12 +328,16 @@ function statsSegs(model: HudModel, words: HudWords, style: Style): Seg[] {
 		{ text: words.points, color: "dim" },
 		{ text: " " },
 		{ text: String(model.points), color: "toolOutput" },
-		{ ...sep(style), drop: true },
-		{ text: words.turn, color: "dim", drop: true },
-		{ text: " ", drop: true },
-		{ text: `+${model.edits.adds}`, color: "success", drop: true },
-		{ text: "/", color: "dim", drop: true },
-		{ text: `−${model.edits.dels}`, color: "error", drop: true },
+		{ ...sep(style), drop: DROP_DIFF },
+		{ text: words.turn, color: "dim", drop: DROP_DIFF },
+		{ text: " ", drop: DROP_DIFF },
+		{ text: `+${model.edits.adds}`, color: "success", drop: DROP_DIFF },
+		{ text: "/", color: "dim", drop: DROP_DIFF },
+		{ text: `−${model.edits.dels}`, color: "error", drop: DROP_DIFF },
+		// Inline on the same `·` rhythm: right-flushed the hint read as a stray
+		// label with no visible relation to this row.
+		{ ...sep(style), drop: DROP_HINT },
+		{ text: `${HUD_ICONS.hotkey} ${words.openPanel}`, color: "accent", hit: PANEL_HIT, drop: DROP_HINT },
 	];
 }
 
@@ -314,9 +348,9 @@ function statsSegs(model: HudModel, words: HudWords, style: Style): Seg[] {
 /**
  * Pure: the three HUD lines for one instant plus the clickable column ranges.
  *
- * `plan` is threaded through so callers that cache segment plans stay honest,
- * but the built-in component rebuilds every frame — three short lines cost less
- * than validating a cache, and rebuilding is what keeps old ANSI out of state.
+ * Every line is rebuilt from the model on each call — three short lines cost
+ * less than validating a cache, and rebuilding is exactly what keeps old ANSI
+ * out of state when the theme changes.
  */
 export function renderHud(
 	model: HudModel,
@@ -329,27 +363,13 @@ export function renderHud(
 	if (width <= 0) return { lines: [], spans: [] };
 	const spin = model.tasks.length > 0 ? spinnerFrame(nowMs, style.spinner) : (style.spinner[0] ?? " ");
 	const plan: Seg[][] = [planSegs(model, words, style), tasksSegs(model, words, style, nowMs), statsSegs(model, words, style)];
-	const hint: Seg = { text: `${HUD_ICONS.hotkey} ${words.expand}`, color: "accent", hit: PANEL_HIT };
-	const hintWidth = stringWidth(hint.text);
 
 	const lines: string[] = [];
 	const spans: HudHitSpan[][] = [];
-	for (let index = 0; index < plan.length; index++) {
-		const isStatsLine = index === plan.length - 1;
-		// Keep the hint only while a readable left side survives next to it
-		// (16 cells ≈ the error/point counts plus one separator).
-		const keepHint = isStatsLine && width - hintWidth - 1 >= 16;
-		const placed = layoutLine(plan[index], keepHint ? width - hintWidth - 1 : width, spin);
-		let text = placed.map((item) => paintSeg(theme, item.text, item.seg)).join("");
-		const used = placed.reduce((n, item) => n + item.width, 0);
-		const lineSpans = spansOf(placed);
-		if (keepHint) {
-			const pad = Math.max(1, width - used - hintWidth);
-			text += " ".repeat(pad) + paintSeg(theme, hint.text, hint);
-			lineSpans.push({ x0: used + pad, x1: used + pad + hintWidth, hit: PANEL_HIT });
-		}
-		lines.push(text);
-		spans.push(lineSpans);
+	for (const segs of plan) {
+		const placed = trimTailSeparators(layoutLine(segs, width, spin));
+		lines.push(placed.map((item) => paintSeg(theme, item.text, item.seg)).join(""));
+		spans.push(spansOf(placed));
 	}
 	return { lines, spans };
 }

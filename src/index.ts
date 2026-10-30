@@ -115,7 +115,7 @@ const HUD_WORDS: { zh: HudWords; en: HudWords } = {
 		errors: "错误",
 		points: "要点",
 		turn: "本轮",
-		expand: "展开",
+		openPanel: "面板展开",
 		allDone: "全部完成",
 	},
 	en: {
@@ -126,7 +126,7 @@ const HUD_WORDS: { zh: HudWords; en: HudWords } = {
 		errors: "errors",
 		points: "points",
 		turn: "this turn",
-		expand: "expand",
+		openPanel: "open panel",
 		allDone: "all done",
 	},
 };

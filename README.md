@@ -1,5 +1,14 @@
 # pi-helm ⛵
 
+![Version](https://img.shields.io/github/v/tag/Steventsang18/pi-helm?label=version&color=blue)
+![License](https://img.shields.io/github/license/Steventsang18/pi-helm?color=green)
+![pi](https://img.shields.io/badge/pi-1.3.0-orange)
+![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
+![CI](https://github.com/Steventsang18/pi-helm/actions/workflows/test.yml/badge.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-any%20pi%20terminal-lightgrey)
+![PRs](https://img.shields.io/badge/PRs-welcome-ff69b4)
+
 **Mission control for your Pi session.** Keep a long terminal session readable: tool noise folds into one line per reply segment, every row leads with *why*, and mission state — plan progress, running tasks, key points — sits one keystroke away.
 
 > Terminal sessions get loud: tool calls, diffs, thinking, subagents. pi-helm folds the tool noise into one summary line per reply segment, keeps the rows reason-first, and puts mission state one keystroke away.

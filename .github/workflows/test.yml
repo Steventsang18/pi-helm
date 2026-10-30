@@ -1,0 +1,23 @@
+name: test
+
+# The tests are dependency-free: test/*.ts import only ../src/*.ts, and src/*
+# imports nothing beyond node builtins (`os`) — `@earendil-works/*` is a peer
+# dependency that only the extension host provides. So this workflow has no
+# dependency-install step on purpose: it would resolve a peer range of `*` for
+# no benefit and add a network failure mode to a pure-logic test run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run tests
+        run: node --experimental-strip-types --test test/*.test.ts

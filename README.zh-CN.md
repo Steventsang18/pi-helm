@@ -1,5 +1,14 @@
 # pi-helm ⛵
 
+![Version](https://img.shields.io/github/v/tag/Steventsang18/pi-helm?label=version&color=blue)
+![License](https://img.shields.io/github/license/Steventsang18/pi-helm?color=green)
+![pi](https://img.shields.io/badge/pi-1.3.0-orange)
+![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
+![CI](https://github.com/Steventsang18/pi-helm/actions/workflows/test.yml/badge.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-any%20pi%20terminal-lightgrey)
+![PRs](https://img.shields.io/badge/PRs-welcome-ff69b4)
+
 **你 Pi 会话的指挥台。** 让长时间终端会话保持可读：工具噪音折成每段回复一行摘要，每行先说“为什么干”，任务状态（计划进度、运行中任务、要点）一个按键就到手。
 
 > 终端会话总是很吵：工具调用、代码差异、思考内容、子任务。pi-helm 把工具噪音折成每段回复一行摘要，行内保留 reason-first 的“为什么”，并把任务状态收在一个按键之内。
